@@ -2,8 +2,16 @@ import { createClient } from "@supabase/supabase-js";
 import fs from "fs";
 import path from "path";
 import { processRawLyrics } from "../src/lib/lyrics-parser";
-import { parseCSVContent, parseJSONContent } from "../src/lib/content-importer";
+import { parseRawPastedSongs, parseCSVContent, parseJSONContent } from "../src/lib/content-importer";
+import { extractSongInfo } from "../src/lib/title-extractor";
 import { findDuplicateInLibrary } from "../src/lib/duplicate-detector";
+import {
+  ALL_BIBLE_BOOKS,
+  CORE_TELUGU_SCRIPTURES,
+  queryBibleScriptures,
+  parseBibleJson,
+  parseBibleCsv,
+} from "../src/lib/telugu-bible-data";
 
 // 1. Load .env.local
 const envPath = path.resolve(process.cwd(), ".env.local");
@@ -25,7 +33,7 @@ const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPA
 const supabaseAnonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
 console.log("========================================");
-console.log("WORSHIPFLOW COMPLETE QA TEST SUITE");
+console.log("WORSHIPFLOW COMPLETE QA & TITLE TEST SUITE");
 console.log("========================================");
 
 let passed = 0;
@@ -60,7 +68,43 @@ async function runSuite() {
   });
   assert("Security: No Service-Role Key in Frontend", !hasServiceRoleLeaked);
 
-  // TEST 2: TXT PARSER & TELUGU DELIMITERS
+  // TEST 2: SONG TITLE & NUMBER EXTRACTION ACCURACY
+  const test1 = extractSongInfo(`పాట:98\nఅంకితం నీకే దేవా\nనా ప్రాణేశ్వరుడా`);
+  assert(
+    "Title Extractor: Multi-line Telugu Song Number (పాట:98 -> Real Title)",
+    test1.songNumber === 98 && test1.title === "అంకితం నీకే దేవా",
+    `Extracted Title: "${test1.title}", Song #: ${test1.songNumber}`
+  );
+
+  const test2 = extractSongInfo(`పాట: 1 - మహిమ నీకే ప్రభువా\nఘనత నీకే యేసయ్యా`);
+  assert(
+    "Title Extractor: Same-line Telugu Song Number & Title",
+    test2.songNumber === 1 && test2.title === "మహిమ నీకే ప్రభువా",
+    `Extracted Title: "${test2.title}", Song #: ${test2.songNumber}`
+  );
+
+  const test3 = extractSongInfo(`Song 42\nAmazing Grace\nHow sweet the sound`);
+  assert(
+    "Title Extractor: English Song Number (Song 42 -> Real Title)",
+    test3.songNumber === 42 && test3.title === "Amazing Grace",
+    `Extracted Title: "${test3.title}", Song #: ${test3.songNumber}`
+  );
+
+  const test4 = extractSongInfo(`12. Neeve Naa Sangeetham\nNeeve naa aashrayam`);
+  assert(
+    "Title Extractor: Numbered Prefix (12. Title)",
+    test4.songNumber === 12 && test4.title === "Neeve Naa Sangeetham",
+    `Extracted Title: "${test4.title}", Song #: ${test4.songNumber}`
+  );
+
+  const test5 = extractSongInfo(`పాట: 99\n[పల్లవి]\nదేవుని స్తుతించుడి\nఆయన పరిశుద్ధ స్థలమున`);
+  assert(
+    "Title Extractor: Skip Section Heading to find Real Title",
+    test5.songNumber === 99 && test5.title === "దేవుని స్తుతించుడి",
+    `Extracted Title: "${test5.title}"`
+  );
+
+  // TEST 3: MULTI-SONG BULK PARSING
   const multiSongTxt = `పాట: 1
 మహిమ నీకే ప్రభువా
 ఘనత నీకే యేసయ్యా
@@ -69,23 +113,26 @@ async function runSuite() {
 నిన్నే ఆరాధింతును
 
 ---
-పాట: 2
+పాట: 98
+అంకితం నీకే దేవా
 పరిశుద్ధుడా పరమ తండ్రి
 నీ నామము స్తుతించెదము
-హల్లెలూయా ఆమెన్
 
 Song 3
 Amazing grace how sweet the sound
 That saved a wretch like me`;
 
-  const songBlocks = multiSongTxt
-    .split(/(?:\n\s*---\s*\n|\n?(?=పాట\s*[:\s]\s*\d+)|\n?(?=Song\s+\d+))/gmi)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 10);
+  const parsedBatch = parseRawPastedSongs(multiSongTxt, []);
+  assert(
+    "Bulk Song Import: Real Titles on every song (No 'పాట:98' titles)",
+    parsedBatch.length === 3 &&
+      parsedBatch[0].title === "మహిమ నీకే ప్రభువా" &&
+      parsedBatch[1].title === "అంకితం నీకే దేవా" &&
+      parsedBatch[2].title === "Amazing grace how sweet the sound",
+    `Titles: ${parsedBatch.map((s) => s.title).join(" | ")}`
+  );
 
-  assert("Telugu Songbook Delimiter Recognition (పాట: 1, ---, Song N)", songBlocks.length >= 3, `Detected ${songBlocks.length} songs`);
-
-  // TEST 3: SLIDE GENERATION
+  // TEST 4: SLIDE GENERATION
   const testLyrics = `మహిమ నీకే ప్రభువా\nఘనత నీకే యేసయ్యా\nనీ కృప నన్ను కాపాడెను\nనా బలం నీవే దేవా`;
   const smartFitRes = processRawLyrics(testLyrics, "smart-fit");
   const oneLineRes = processRawLyrics(testLyrics, "one-line");
@@ -95,15 +142,14 @@ That saved a wretch like me`;
   assert("Slide Generation: One Line Per Slide", oneLineRes.slides.length === 4);
   assert("Slide Generation: Two Lines Per Slide", twoLineRes.slides.length === 2);
 
-  // TEST 4: CSV PARSER
+  // TEST 5: CSV & JSON PARSERS
   const testCSV = `title,lyrics,language,artist\n"Neeve Naa Sangeetham","Neeve naa sangeetham\\nNeeve naa aashrayam",telugu,"Worship"\n"Great Are You Lord","You give life You are love",english,"All Sons & Daughters"`;
   const csvSongs = parseCSVContent(testCSV, []);
   assert("CSV Parser: Header Mapping & Song Count", csvSongs.length === 2 && csvSongs[0].title === "Neeve Naa Sangeetham");
 
-  // TEST 5: JSON PARSER
   const testJSON = JSON.stringify([
     { title: "Krupa Krupa", lyrics: "Krupa krupa nee krupa", language: "telugu" },
-    { title: "How Great Is Our God", lyrics: "The splendor of a King", language: "english" }
+    { title: "How Great Is Our God", lyrics: "The splendor of a King", language: "english" },
   ]);
   const jsonSongs = parseJSONContent(testJSON, []);
   assert("JSON Parser: Valid JSON Import", jsonSongs.length === 2 && jsonSongs[0].title === "Krupa Krupa");
@@ -116,7 +162,39 @@ That saved a wretch like me`;
   const nonDupCheck = findDuplicateInLibrary({ title: "Completely Unique Song Title 99", lyrics: "Different lyrics here" }, existingList);
   assert("Duplicate Detection: Unique Song No False Positive", dupCheck !== null && nonDupCheck === null);
 
-  // TEST 7: SUPABASE DATABASE CONNECTION & AUXILIARY TABLES READ
+  // TEST 7: TELUGU BIBLE ENGINE
+  assert("Bible Data: 66 Books Available", ALL_BIBLE_BOOKS.length === 66);
+  assert("Bible Data: Core Scriptures Available", CORE_TELUGU_SCRIPTURES.length > 10);
+
+  const john316 = queryBibleScriptures("John 3:16");
+  assert(
+    "Bible Search: English Reference 'John 3:16'",
+    john316.length === 1 && john316[0].verse === 16 && john316[0].textTe.includes("దేవుడు లోకమును ఎంతో ప్రేమించెను")
+  );
+
+  const teluguJohn = queryBibleScriptures("యోహాను 3:16");
+  assert(
+    "Bible Search: Telugu Reference 'యోహాను 3:16'",
+    teluguJohn.length === 1 && teluguJohn[0].verse === 16
+  );
+
+  const psalm23 = queryBibleScriptures("Psalms 23");
+  assert(
+    "Bible Search: Full Chapter 'Psalms 23' (All 6 Verses)",
+    psalm23.length === 6 && psalm23[0].textTe.includes("యెహోవా నా కాపరి")
+  );
+
+  const bibleJsonTest = parseBibleJson(
+    JSON.stringify([
+      { book: "John", bookTe: "యోహాను", chapter: 1, verse: 1, textTe: "ఆదియందు వాక్యము ఉండెను", textEn: "In the beginning was the Word" },
+    ])
+  );
+  assert("Bible Import: JSON Parser", !bibleJsonTest.error && bibleJsonTest.verses.length === 1);
+
+  const bibleCsvTest = parseBibleCsv(`book,chapter,verse,telugu_text,english_text\n"John",1,1,"ఆదియందు వాక్యము ఉండెను","In the beginning was the Word"`);
+  assert("Bible Import: CSV Parser", !bibleCsvTest.error && bibleCsvTest.verses.length === 1);
+
+  // TEST 8: SUPABASE DATABASE CONNECTION & AUXILIARY TABLES READ
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
   try {
     const { data: themes, error: themeError } = await supabase.from("themes").select("id, name").limit(1);

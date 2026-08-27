@@ -3,8 +3,53 @@ import type { ImportItem, ImportJob, Song, Language } from "@/types";
 import { findDuplicateInLibrary } from "./duplicate-detector";
 import { detectLanguage } from "./lyrics-parser";
 
+import { extractSongInfo } from "./title-extractor";
+
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/**
+ * Split raw text into song chunks using standard delimiters or song number boundaries
+ */
+export function splitRawTextIntoChunks(rawText: string): string[] {
+  const normalizedText = rawText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  if (!normalizedText) return [];
+
+  // Pass 1: Standard delimiters --- or ===
+  let chunks = normalizedText
+    .split(/\n\s*(?:---|===)\s*\n/)
+    .map((c) => c.trim())
+    .filter(Boolean);
+
+  // Pass 2: Telugu song markers (పాట: 1, పాట:1, పాట 1, పాట నెం. 1, పాట సంఖ్య 1)
+  chunks = chunks.flatMap((chunk) => {
+    const sub = chunk
+      .split(/(?:\n|^)(?=పాట\s*(?:నెం\.?|నంబరు|సంఖ్య|నం\.?)?\s*[:\-\.]?\s*\d+)/imu)
+      .map((c) => c.trim())
+      .filter((c) => c.length > 5);
+    return sub.length > 0 ? sub : [chunk];
+  });
+
+  // Pass 3: English song markers (Song 1, Song No. 1, No. 1, #1)
+  chunks = chunks.flatMap((chunk) => {
+    const sub = chunk
+      .split(/(?:\n|^)(?=(?:Song\s*(?:No\.?|#)?|No\.)\s*[:\-\.]?\s*\d+)/imu)
+      .map((c) => c.trim())
+      .filter((c) => c.length > 5);
+    return sub.length > 0 ? sub : [chunk];
+  });
+
+  // Pass 4: Numbered list markers (1. Title, 01. Title)
+  chunks = chunks.flatMap((chunk) => {
+    const sub = chunk
+      .split(/(?:\n|^)(?=\d{1,4}\s*[\.\-\)]\s+[A-Za-z\u0C00-\u0C7F])/imu)
+      .map((c) => c.trim())
+      .filter((c) => c.length > 5);
+    return sub.length > 0 ? sub : [chunk];
+  });
+
+  return chunks.filter((c) => c.trim().length > 0);
 }
 
 /**
@@ -16,104 +61,35 @@ export function parseRawPastedSongs(rawText: string, existingSongs: Song[] = [])
   const chunks = splitRawTextIntoChunks(rawText);
   const items: ImportItem[] = [];
 
-  for (const chunk of chunks) {
+  for (let idx = 0; idx < chunks.length; idx++) {
+    const chunk = chunks[idx];
     if (!chunk.trim()) continue;
 
-    const lines = chunk.trim().split("\n");
-    let title = "";
-    let romanizedTitle = "";
-    let artist = "";
-    let lyricist = "";
-    let category = "worship";
-    let language: Language = "telugu";
-    let sourceName = "";
-    let sourceUrl = "";
-    let license = "Public Domain / Authorized";
-    let copyrightNotice = "";
-    const lyricsLines: string[] = [];
+    // Use intelligent song info & title extractor
+    const info = extractSongInfo(chunk, idx);
+    if (!info.lyrics && !info.title) continue;
 
-    let isParsingLyrics = false;
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-
-      if (!isParsingLyrics) {
-        const titleMatch = trimmed.match(/^Title:\s*(.+)$/i);
-        const romMatch = trimmed.match(/^(?:Romanized|Transliteration):\s*(.+)$/i);
-        const artistMatch = trimmed.match(/^(?:Artist|Author|Singer):\s*(.+)$/i);
-        const lyricistMatch = trimmed.match(/^(?:Lyricist|Composer|Written By):\s*(.+)$/i);
-        const catMatch = trimmed.match(/^Category:\s*(.+)$/i);
-        const langMatch = trimmed.match(/^Language:\s*(.+)$/i);
-        const srcMatch = trimmed.match(/^Source:\s*(.+)$/i);
-        const licMatch = trimmed.match(/^License:\s*(.+)$/i);
-
-        if (titleMatch) {
-          title = titleMatch[1].trim();
-          continue;
-        } else if (romMatch) {
-          romanizedTitle = romMatch[1].trim();
-          continue;
-        } else if (artistMatch) {
-          artist = artistMatch[1].trim();
-          continue;
-        } else if (lyricistMatch) {
-          lyricist = lyricistMatch[1].trim();
-          continue;
-        } else if (catMatch) {
-          category = catMatch[1].trim().toLowerCase();
-          continue;
-        } else if (langMatch) {
-          const l = langMatch[1].trim().toLowerCase();
-          if (l === "telugu" || l === "english" || l === "hindi" || l === "mixed") {
-            language = l as Language;
-          }
-          continue;
-        } else if (srcMatch) {
-          sourceName = srcMatch[1].trim();
-          continue;
-        } else if (licMatch) {
-          license = licMatch[1].trim();
-          continue;
-        } else if (trimmed.length > 0) {
-          if (!title) {
-            title = trimmed;
-            continue;
-          }
-          isParsingLyrics = true;
-          lyricsLines.push(trimmed);
-        }
-      } else {
-        lyricsLines.push(trimmed);
-      }
-    }
-
-    const lyrics = lyricsLines.join("\n").trim();
-    if (!title && lyricsLines.length > 0) {
-      title = lyricsLines[0];
-    }
-
-    if (!title) continue;
-
-    const detectedLang = detectLanguage(lyrics);
-    if (language === "telugu" && detectedLang !== "telugu") {
-      language = detectedLang === "romanized-telugu" ? "telugu" : (detectedLang as Language);
-    }
-
-    const duplicate = findDuplicateInLibrary({ title, romanizedTitle, lyrics, artist }, existingSongs);
+    const duplicate = findDuplicateInLibrary(
+      {
+        title: info.title,
+        romanizedTitle: info.subtitle,
+        lyrics: info.lyrics,
+        artist: info.artist,
+      },
+      existingSongs
+    );
 
     items.push({
       id: generateId(),
-      title,
-      romanizedTitle: romanizedTitle || undefined,
-      language,
-      category,
-      artist: artist || undefined,
-      lyricist: lyricist || undefined,
-      lyrics,
-      sourceName: sourceName || undefined,
-      sourceUrl: sourceUrl || undefined,
-      license: license || undefined,
-      copyrightNotice: copyrightNotice || undefined,
+      title: info.title,
+      romanizedTitle: info.subtitle,
+      language: info.language as Language,
+      category: info.category || "worship",
+      artist: info.artist,
+      lyricist: info.lyricist,
+      lyrics: info.lyrics,
+      sourceName: info.sourceName || (info.songNumber ? `Songbook #${info.songNumber}` : undefined),
+      license: info.license || "Public Domain / Authorized",
       status: duplicate ? "duplicate" : "valid",
       duplicateOfId: duplicate?.songId,
       duplicateScore: duplicate?.score,
@@ -122,30 +98,6 @@ export function parseRawPastedSongs(rawText: string, existingSongs: Song[] = [])
   }
 
   return items;
-}
-
-function splitRawTextIntoChunks(rawText: string): string[] {
-  const chunks: string[] = [];
-
-  // Primary delimiter: ---
-  const primaryChunks = rawText.split(/\n\s*---\s*\n/);
-  if (primaryChunks.length > 1) {
-    return primaryChunks;
-  }
-
-  // Fallback: Telugu song markers (పాట:1, పాట: 1, పాట :1, పాట : 1, పాట 1, పాట:133, etc.)
-  const teluguMarkerChunks = rawText.split(/\n(?=పాట\s*[:\s]\s*\d+\s*$)/imu);
-  if (teluguMarkerChunks.length > 1) {
-    return teluguMarkerChunks;
-  }
-
-  // Fallback: English song markers (Song 1, Song:1, No. 1, etc.)
-  const englishMarkerChunks = rawText.split(/\n(?=(?:Song\s+(?:No\.?\s*)?\d+|No\.\s*\d+)\s*$)/imu);
-  if (englishMarkerChunks.length > 1) {
-    return englishMarkerChunks;
-  }
-
-  return [rawText];
 }
 
 /**

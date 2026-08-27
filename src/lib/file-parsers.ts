@@ -90,95 +90,33 @@ function buildImportItemFromRaw({
   };
 }
 
+import { extractSongInfo } from "@/lib/title-extractor";
+
 export async function parseTxtFile(text: string, filename: string, existingSongs: Song[] = []): Promise<ParsedFileResult> {
   const cleaned = sanitizeText(text);
   const fallbackTitle = filename.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ").trim() || "Untitled";
 
-  // Detect if this text contains multiple songs using known delimiters
-  const isMultiSong =
-    /\n\s*---\s*\n/.test(cleaned) ||                                    // --- separator
-    /\nపాట\s*[:\s]\s*\d+\s*(\n|$)/mu.test(cleaned) ||                 // Telugu పాట:1 marker
-    /\n(?:Song\s+(?:No\.?\s*)?\d+|No\.\s*\d+)\s*(\n|$)/im.test(cleaned); // Song 1 / No. 1
-
-  if (isMultiSong) {
-    // Delegate to multi-song parser
-    const items = parseRawPastedSongs(cleaned, existingSongs);
-    if (items.length > 0) {
-      return {
-        filename,
-        format: "txt",
-        items,
-        errors: [],
-      };
-    }
-    // Fall through to single-song if multi-song parser returned nothing
+  // Use raw pasted song parser which splits chunks and extracts real song titles & numbers
+  const items = parseRawPastedSongs(cleaned, existingSongs);
+  if (items.length > 0) {
+    return {
+      filename,
+      format: "txt",
+      items,
+      errors: [],
+    };
   }
 
-  // Single-song parsing (original logic)
-  const lines = cleaned.split("\n");
-
-  let title = "";
-  let artist = "";
-  let lyricist = "";
-  let category = "worship";
-  let language: Language = "telugu";
-  let lyricsLines: string[] = [];
-  let collecting = false;
-
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line) continue;
-
-    const lower = line.toLowerCase();
-    if (lower.startsWith("title:")) {
-      title = line.slice(6).trim();
-      continue;
-    }
-    if (lower.startsWith("artist:")) {
-      artist = line.slice(7).trim();
-      continue;
-    }
-    if (lower.startsWith("lyricist:")) {
-      lyricist = line.slice(9).trim();
-      continue;
-    }
-    if (lower.startsWith("category:")) {
-      category = line.slice(9).trim().toLowerCase();
-      continue;
-    }
-    if (lower.startsWith("language:")) {
-      const lang = line.slice(9).trim().toLowerCase();
-      if (["telugu", "english", "hindi", "mixed", "romanized"].includes(lang)) {
-        language = lang as Language;
-      }
-      continue;
-    }
-    if (/^\[.+\]$/i.test(line)) {
-      collecting = true;
-      continue;
-    }
-
-    if (!title && !collecting) {
-      title = line;
-      collecting = true;
-      continue;
-    }
-
-    if (collecting || title) {
-      lyricsLines.push(line);
-    }
-  }
-
-  const lyrics = lyricsLines.join("\n").trim();
-  if (!title) title = fallbackTitle;
-
+  // Fallback single song extraction
+  const info = extractSongInfo(cleaned);
   const item = buildImportItemFromRaw({
-    title,
-    artist,
-    lyricist,
-    category,
-    language,
-    lyrics: lyrics || cleaned,
+    title: info.title || fallbackTitle,
+    romanizedTitle: info.subtitle,
+    artist: info.artist,
+    lyricist: info.lyricist,
+    category: info.category,
+    language: info.language as Language,
+    lyrics: info.lyrics || cleaned,
     existingSongs,
   });
 

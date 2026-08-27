@@ -158,6 +158,8 @@ function estimateConfidence(text: string, source: "text" | "ocr", ocrConfidence?
   return 0.8;
 }
 
+import { extractSongInfo } from "@/lib/title-extractor";
+
 function buildImportItemFromPdfSong(
   song: { title: string; body: string; startPage: number; endPage: number },
   filename: string,
@@ -165,26 +167,34 @@ function buildImportItemFromPdfSong(
   confidence: number
 ): ImportItem {
   const cleanedBody = cleanNoise(sanitizeText(song.body));
-  const normalizedLyrics = normalizeText(cleanDuplicateLines(cleanedBody));
+  const fullSongText = (song.title ? song.title + "\n" : "") + cleanedBody;
+  
+  // Use intelligent title and metadata extractor
+  const info = extractSongInfo(fullSongText);
+  const normalizedLyrics = normalizeText(cleanDuplicateLines(info.lyrics || cleanedBody));
   const detected = detectLanguage(normalizedLyrics);
-  const resolvedLanguage: Language = detected === "romanized-telugu" ? "telugu" : (detected as Language);
+  const resolvedLanguage: Language = (info.language as Language) || (detected === "romanized-telugu" ? "telugu" : (detected as Language));
   const { artist, category, license } = extractMetadataFromBody(cleanedBody);
 
-  const duplicate = findDuplicateInLibrary({ title: song.title, lyrics: normalizedLyrics, artist }, existingSongs);
+  const finalTitle = info.title || song.title.replace(/^(?:పాట\s*[:\-\.]?\s*\d+|Song\s*\d+|No\.\s*\d+)/iu, "").trim() || "Untitled Song";
+
+  const duplicate = findDuplicateInLibrary({ title: finalTitle, lyrics: normalizedLyrics, artist: info.artist || artist }, existingSongs);
   
   const isLowConfidence = confidence < 0.6;
   
   return {
     id: generateId(),
-    title: song.title,
+    title: finalTitle,
+    romanizedTitle: info.subtitle,
     language: resolvedLanguage,
-    category: category || "worship",
-    artist,
+    category: info.category || category || "worship",
+    artist: info.artist || artist,
+    lyricist: info.lyricist,
     lyrics: normalizedLyrics,
-    sourceName: `PDF Import: ${filename}`,
+    sourceName: `PDF Import: ${filename}${info.songNumber ? ` (#${info.songNumber})` : ""}`,
     sourceType: "PDF_IMPORT",
     sourceFileName: filename,
-    license: license || "Needs Review",
+    license: info.license || license || "Public Domain / Authorized",
     pageStart: song.startPage,
     pageEnd: song.endPage,
     confidence,

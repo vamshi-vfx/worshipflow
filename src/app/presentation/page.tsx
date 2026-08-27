@@ -185,14 +185,38 @@ function PresentationConsole() {
       try {
         const bible = JSON.parse(rawBible);
         setCurrentBible(bible);
-        setAllSlides([
-          {
-            id: bible.id,
+        const slides: { id: string; primaryText: string; secondaryText?: string; label?: string }[] = [];
+
+        if (bible.verses && Array.isArray(bible.verses) && bible.verses.length > 0) {
+          bible.verses.forEach((v: any) => {
+            slides.push({
+              id: `v-${v.verseNumber}`,
+              primaryText: v.textTe || v.text,
+              secondaryText: `${bible.bookTe || bible.book} ${bible.chapter}:${v.verseNumber} ${v.textEn ? `• ${v.textEn}` : ""}`,
+              label: `${bible.bookTe || bible.book} ${bible.chapter}:${v.verseNumber}`,
+            });
+          });
+        } else if (bible.text && bible.text.includes("---")) {
+          const parts = bible.text.split(/\n\s*---\s*\n/).filter(Boolean);
+          parts.forEach((p: string, idx: number) => {
+            slides.push({
+              id: `v-${idx + 1}`,
+              primaryText: p,
+              secondaryText: `${bible.book || "Scripture"} ${bible.chapter || ""}`,
+              label: "Holy Scripture",
+            });
+          });
+        } else {
+          slides.push({
+            id: bible.id || "bible-1",
             primaryText: bible.text,
-            secondaryText: `${bible.book} ${bible.chapter}:${bible.verseStart}${bible.verseEnd ? `-${bible.verseEnd}` : ""}`,
-            label: "Scripture",
-          },
-        ]);
+            secondaryText: `${bible.book || bible.bookTe || ""} ${bible.chapter ? `${bible.chapter}:${bible.verseStart || 1}` : ""}`,
+            label: "Holy Scripture",
+          });
+        }
+
+        setAllSlides(slides);
+        setCurrentSlideIndex(0);
       } catch (e) {
         console.error(e);
       }

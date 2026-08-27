@@ -17,6 +17,8 @@ function AuthCallbackContent() {
     const handleVerification = async () => {
       try {
         const code = searchParams.get("code");
+        const tokenHash = searchParams.get("token_hash");
+        const type = searchParams.get("type");
         const error = searchParams.get("error");
         const errorDescription = searchParams.get("error_description");
 
@@ -26,24 +28,63 @@ function AuthCallbackContent() {
           return;
         }
 
+        // 1. PKCE Code Exchange
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) {
+            console.error("Exchange code error:", exchangeError);
             setState("error");
-            setMessage("Verification link expired or invalid. Please try again.");
+            setMessage("Verification link expired or invalid. Please request a new verification email.");
             return;
           }
         }
+        // 2. Token Hash OTP Verification
+        else if (tokenHash && type) {
+          const { error: otpError } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: type as any,
+          });
+          if (otpError) {
+            console.error("OTP verification error:", otpError);
+            setState("error");
+            setMessage("Verification token expired or invalid. Please try again.");
+            return;
+          }
+        }
+        // 3. Check for implicit hash fragments in window.location.hash (#access_token=...&refresh_token=...)
+        else if (typeof window !== "undefined" && window.location.hash) {
+          const hashParams = new URLSearchParams(window.location.hash.substring(1));
+          const accessToken = hashParams.get("access_token");
+          const refreshToken = hashParams.get("refresh_token");
 
-        await new Promise((resolve) => setTimeout(resolve, 800));
+          if (accessToken && refreshToken) {
+            const { error: setSessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            if (setSessionError) {
+              console.error("Set session error:", setSessionError);
+              setState("error");
+              setMessage("Failed to establish authenticated session from link.");
+              return;
+            }
+          }
+        }
+
+        // Verify that a valid session actually exists
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        await new Promise((resolve) => setTimeout(resolve, 600));
         setState("success");
-        setMessage("Email verified successfully! Redirecting to WorshipFlow...");
+        setMessage("Authentication verified successfully! Redirecting to WorshipFlow...");
 
-        const redirectTo = searchParams.get("redirect") || "/";
+        const redirectTo = searchParams.get("redirect") || (session ? "/dashboard" : "/login");
         setTimeout(() => {
           router.push(redirectTo);
-        }, 1500);
-      } catch {
+          router.refresh();
+        }, 1200);
+      } catch (err: any) {
+        console.error("Auth callback exception:", err);
         setState("error");
         setMessage("An unexpected error occurred during verification.");
       }

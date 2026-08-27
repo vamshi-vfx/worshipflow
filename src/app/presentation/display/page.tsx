@@ -78,11 +78,36 @@ export default function PresentationDisplayPage() {
         } else if (currentBibleRaw) {
           try {
             const bible = JSON.parse(currentBibleRaw);
-            setSlide({
-              primaryText: bible.text,
-              secondaryText: `${bible.book} ${bible.chapter}:${bible.verseStart}${bible.verseEnd ? `-${bible.verseEnd}` : ""}`,
-              sectionLabel: "Holy Scripture",
-            });
+            const bibleSlides: any[] = [];
+
+            if (bible.verses && Array.isArray(bible.verses) && bible.verses.length > 0) {
+              bible.verses.forEach((v: any) => {
+                bibleSlides.push({
+                  primaryText: v.textTe || v.text,
+                  secondaryText: `${bible.bookTe || bible.book} ${bible.chapter}:${v.verseNumber} ${v.textEn ? `• ${v.textEn}` : ""}`,
+                  sectionLabel: `${bible.bookTe || bible.book} ${bible.chapter}:${v.verseNumber}`,
+                });
+              });
+            } else if (bible.text && bible.text.includes("---")) {
+              const parts = bible.text.split(/\n\s*---\s*\n/).filter(Boolean);
+              parts.forEach((p: string, idx: number) => {
+                bibleSlides.push({
+                  primaryText: p,
+                  secondaryText: `${bible.book || "Scripture"} ${bible.chapter || ""}`,
+                  sectionLabel: "Holy Scripture",
+                });
+              });
+            } else {
+              bibleSlides.push({
+                primaryText: bible.text,
+                secondaryText: `${bible.book || bible.bookTe || ""} ${bible.chapter ? `${bible.chapter}:${bible.verseStart || 1}` : ""}`,
+                sectionLabel: "Holy Scripture",
+              });
+            }
+
+            if (bibleSlides[msg.index]) {
+              setSlide(bibleSlides[msg.index]);
+            }
           } catch (e) {
             console.error("Display bible parse error", e);
           }
@@ -92,6 +117,8 @@ export default function PresentationDisplayPage() {
 
     // Also check storage on mount
     const currentSongRaw = localStorage.getItem("church-lyrics-current-song");
+    const currentBibleRaw = localStorage.getItem("church-lyrics-current-bible");
+
     if (currentSongRaw) {
       try {
         const song = JSON.parse(currentSongRaw);
@@ -100,6 +127,25 @@ export default function PresentationDisplayPage() {
             primaryText: song.sections[0].lines[0].primaryText || song.sections[0].lines[0].primary_text,
             secondaryText: song.sections[0].lines[0].secondaryText || song.sections[0].lines[0].secondary_text,
             sectionLabel: song.sections[0].label,
+          });
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    } else if (currentBibleRaw) {
+      try {
+        const bible = JSON.parse(currentBibleRaw);
+        if (bible.verses && bible.verses[0]) {
+          setSlide({
+            primaryText: bible.verses[0].textTe || bible.verses[0].text,
+            secondaryText: `${bible.bookTe || bible.book} ${bible.chapter}:${bible.verses[0].verseNumber} ${bible.verses[0].textEn ? `• ${bible.verses[0].textEn}` : ""}`,
+            sectionLabel: `${bible.bookTe || bible.book} ${bible.chapter}:${bible.verses[0].verseNumber}`,
+          });
+        } else {
+          setSlide({
+            primaryText: bible.text,
+            secondaryText: `${bible.book} ${bible.chapter}:${bible.verseStart || 1}`,
+            sectionLabel: "Holy Scripture",
           });
         }
       } catch (e) {

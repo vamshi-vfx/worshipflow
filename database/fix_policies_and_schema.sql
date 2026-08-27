@@ -192,9 +192,30 @@ ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS source_url TEXT;
 ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS license TEXT;
 ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS copyright_notice TEXT;
 ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS content_owner TEXT;
-ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS usage_count INTEGER DEFAULT 0;
-ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS source_type TEXT;
-ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS source_file_name TEXT;
-ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS source_file_hash TEXT;
-ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS page_start INTEGER;
-ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS page_end INTEGER;
+ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS song_number INTEGER;
+ALTER TABLE public.import_items ADD COLUMN IF NOT EXISTS song_number INTEGER;
+
+-- Ensure bible_presentations table exists with clean RLS
+CREATE TABLE IF NOT EXISTS public.bible_presentations (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  book TEXT NOT NULL,
+  chapter INTEGER NOT NULL,
+  verse_start INTEGER NOT NULL,
+  verse_end INTEGER,
+  translation TEXT NOT NULL DEFAULT 'Telugu / English',
+  text TEXT NOT NULL,
+  telugu_text TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  created_by UUID
+);
+
+ALTER TABLE public.bible_presentations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Bible presentations viewable by everyone" ON public.bible_presentations;
+CREATE POLICY "Bible presentations viewable by everyone" ON public.bible_presentations FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Bible presentations insertable by authenticated" ON public.bible_presentations;
+CREATE POLICY "Bible presentations insertable by authenticated" ON public.bible_presentations FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Bible presentations updatable by owner" ON public.bible_presentations;
+CREATE POLICY "Bible presentations updatable by owner" ON public.bible_presentations FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "Bible presentations deletable by owner" ON public.bible_presentations;
+CREATE POLICY "Bible presentations deletable by owner" ON public.bible_presentations FOR DELETE USING (true);
+
