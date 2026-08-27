@@ -1,0 +1,33 @@
+# Environment variables
+.env.local
+.env*.local
+
+# Dependencies
+node_modules
+/.next/
+/out/
+
+# Build outputs
+dist
+build
+
+# Testing
+coverage
+
+# Misc
+.DS_Store
+*.log
+.vscode
+.idea
+
+# Turbopack
+.next/cache
+.env.local
+node_modules/
+.next/
+.env
+.env.local
+.env.*.local
+.playwright-mcp/
+*.tsbuildinfo
+supabase/.temp/

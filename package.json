@@ -1,0 +1,61 @@
+{
+  "name": "church-lyrics-os",
+  "version": "1.0.0",
+  "description": "Premium Church Worship Lyrics & Live Presentation Platform",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "node scripts/copy-pdf-worker.js",
+    "prepare": "node scripts/copy-pdf-worker.js",
+    "prebuild": "node scripts/copy-pdf-worker.js"
+  },
+  "keywords": [
+    "church",
+    "lyrics",
+    "presentation",
+    "worship"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@hookform/resolvers": "^5.0.1",
+    "@supabase/auth-helpers-nextjs": "^0.15.0",
+    "@supabase/ssr": "^0.12.5",
+    "@supabase/supabase-js": "^2.112.4",
+    "@tailwindcss/postcss": "^4.3.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "framer-motion": "^12.6.5",
+    "jspdf": "^4.2.1",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.511.0",
+    "mammoth": "^1.12.1",
+    "next": "^16.3.2",
+    "pdfjs-dist": "^6.2.108",
+    "pptxgenjs": "^4.0.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-hook-form": "^7.55.0",
+    "tailwind-merge": "^3.3.0",
+    "uuid": "^11.1.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.13",
+    "@types/node": "^20.10.0",
+    "@types/react": "^19.0.0",
+    "@types/uuid": "^10.0.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "^16.3.2",
+    "postcss": "^8.4.47",
+    "react-dropzone": "^14.3.8",
+    "tailwindcss": "^4.1.4",
+    "typescript": "^5.7.2"
+  }
+}
