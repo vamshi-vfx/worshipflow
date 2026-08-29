@@ -57,6 +57,9 @@ import {
   type DetectedSection,
   type GeneratedSlide,
 } from "@/lib/lyrics-parser";
+import { extractSongInfo } from "@/lib/title-extractor";
+import { generateSafeSlug } from "@/services/database";
+
 
 const MODES = [
   { value: "smart-fit", label: "Smart Fit" },
@@ -223,6 +226,19 @@ export default function SmartImportPage() {
       setUndoStack([]);
       setRedoStack([]);
       setProcessingStep("");
+
+      // Auto-extract title if user hasn't set one yet
+      if (!songTitle.trim()) {
+        try {
+          const extracted = extractSongInfo(rawLyrics);
+          if (extracted.title && !extracted.title.startsWith("Untitled")) {
+            setSongTitle(extracted.title);
+          }
+        } catch {
+          // Non-fatal: title extraction failure won't block slide generation
+        }
+      }
+
       setStep("sections");
     } catch (e) {
       console.error("Auto format failed", e);
@@ -230,7 +246,7 @@ export default function SmartImportPage() {
     } finally {
       setIsProcessing(false);
     }
-  }, [rawLyrics, mode]);
+  }, [rawLyrics, mode, songTitle]);
 
   const regenerateSlides = useCallback(() => {
     const newSlides = generateSlides(sections, mode);
@@ -583,10 +599,11 @@ export default function SmartImportPage() {
         }
       }
 
+      const safeTitle = songTitle.trim() || "Untitled Song";
       const song = await db.createSong({
-        title: songTitle || "Untitled Song",
-        romanized_title: songTitle || "Untitled Song",
-        slug: (songTitle || "untitled").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
+        title: safeTitle,
+        romanized_title: safeTitle,
+        slug: generateSafeSlug(safeTitle),
         language: detectedLanguage === "romanized-telugu" ? "telugu" : detectedLanguage,
         secondary_language: detectedLanguage === "mixed" ? "english" : undefined,
         category: "worship",
@@ -640,9 +657,24 @@ export default function SmartImportPage() {
           display_mode: "telugu",
         });
       }
-    } catch (e) {
-      console.error("Failed to persist song", e);
-      setError("Failed to save song");
+    } catch (e: any) {
+      const pgCode = e?.code || "";
+      const pgDetail = e?.details || e?.detail || "";
+      const pgMsg = e?.message || String(e);
+      console.error("[SongSave] Failed to persist song", {
+        code: pgCode,
+        message: pgMsg,
+        detail: pgDetail,
+        title: songTitle,
+        detectedLanguage,
+        slidesCount: slides.length,
+        sectionsCount: sections.length,
+      });
+      setError(
+        pgCode === "23505"
+          ? "A song with this title or slug already exists. Please change the title."
+          : "Failed to save song. Please check your connection and try again."
+      );
       throw e;
     }
   }, [user, slides, sections, rawLyrics, detectedLanguage, songTitle, songId, db]);

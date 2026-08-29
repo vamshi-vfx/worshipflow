@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -36,12 +36,42 @@ const LANGUAGES = [
   { code: "hindi", label: "हिन्दी", script: "hindi" },
 ];
 
+// Telugu consonants for letter browser (A1 varga through HA + independent vowels)
+const TELUGU_LETTERS = [
+  "అ","ఆ","ఇ","ఈ","ఉ","ఊ","ఎ","ఏ","ఐ","ఒ","ఓ","ఔ",
+  "క","ఖ","గ","ఘ","చ","ఛ","జ","ఝ","ట","ఠ","డ","ఢ",
+  "త","థ","ద","ధ","న","ప","ఫ","బ","భ","మ","య","ర","ల","వ","శ","ష","స","హ","ళ","ఱ",
+];
+
+const ENGLISH_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+/**
+ * Returns the Unicode base codepoint of the first character in a Telugu string.
+ * This strips vowel marks (matras) and virama so we can match base consonants.
+ */
+function teluguBaseChar(str: string): string {
+  if (!str) return "";
+  const firstChar = str.trim()[0] || "";
+  const cp = firstChar.codePointAt(0) || 0;
+  // Telugu vowel dependent signs: 0C3E–0C4C, virama: 0C4D
+  // We just return the raw first character — Telugu consonants in the range 0C05–0C75
+  // naturally compare correctly since matras follow as separate codepoints
+  return String.fromCodePoint(cp);
+}
+
+/** Unicode-aware normalization for search */
+function normalizeForSearch(s: string): string {
+  return s.normalize("NFC").toLowerCase().trim();
+}
+
 export default function SongsPage() {
   const router = useRouter();
   const { user } = useAuth();
   const toast = useToast();
   const [songs, setSongs] = useState<Song[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [rawSearch, setRawSearch] = useState("");        // immediate input value
+  const [searchQuery, setSearchQuery] = useState("");    // debounced value used for filtering
+  const [letterFilter, setLetterFilter] = useState<string | null>(null);
   const [languageFilter, setLanguageFilter] = useState<Language | "all">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"title" | "updated_at" | "created_at">("updated_at");
@@ -50,11 +80,23 @@ export default function SongsPage() {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showRecentlyUsed, setShowRecentlyUsed] = useState(false);
+  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!user) return;
     loadSongs();
   }, [user]);
+
+  // Debounce search input by 250ms
+  const handleSearchChange = useCallback((value: string) => {
+    setRawSearch(value);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setSearchQuery(value);
+      // Clear letter filter when typing
+      if (value.trim()) setLetterFilter(null);
+    }, 250);
+  }, []);
 
   const loadSongs = async () => {
     if (!user) return;
@@ -74,26 +116,44 @@ export default function SongsPage() {
     if (showRecentlyUsed) {
       result = result.filter((s) => s.updatedAt && new Date(s.updatedAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
     }
+
+    // Letter browser filter (Unicode-aware)
+    if (letterFilter) {
+      const normLetter = normalizeForSearch(letterFilter);
+      result = result.filter((song) => {
+        const titleFirst = normalizeForSearch(song.title)[0] || "";
+        // For Telugu: compare first codepoint of normalized title
+        if (letterFilter.charCodeAt(0) > 0x0C00) {
+          return teluguBaseChar(song.title) === letterFilter;
+        }
+        return titleFirst === normLetter;
+      });
+    }
+
     return result
       .filter((song) => {
+        const q = normalizeForSearch(searchQuery);
         const matchesSearch =
-          searchQuery === "" ||
-          song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (song.romanizedTitle && song.romanizedTitle.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          (song.lyrics && song.lyrics.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          (song.tags && song.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase())));
+          q === "" ||
+          normalizeForSearch(song.title).includes(q) ||
+          (song.romanizedTitle && normalizeForSearch(song.romanizedTitle).includes(q)) ||
+          (song.englishTitle && normalizeForSearch(song.englishTitle).includes(q)) ||
+          (song.artist && normalizeForSearch(song.artist).includes(q)) ||
+          (song.author && normalizeForSearch(song.author).includes(q)) ||
+          (song.lyrics && normalizeForSearch(song.lyrics).includes(q)) ||
+          (song.tags && song.tags.some((tag) => normalizeForSearch(tag).includes(q)));
         const matchesLanguage = languageFilter === "all" || song.language === languageFilter;
         const matchesCategory = categoryFilter === "all" || song.category === categoryFilter;
         const matchesFavorites = !showFavoritesOnly || song.favorite;
         return matchesSearch && matchesLanguage && matchesCategory && matchesFavorites;
       })
       .sort((a, b) => {
-        if (sortBy === "title") return a.title.localeCompare(b.title);
+        if (sortBy === "title") return a.title.localeCompare(b.title, undefined, { sensitivity: "base" });
         if (sortBy === "updated_at")
           return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
-  }, [songs, searchQuery, languageFilter, categoryFilter, sortBy, showFavoritesOnly, showRecentlyUsed]);
+  }, [songs, searchQuery, letterFilter, languageFilter, categoryFilter, sortBy, showFavoritesOnly, showRecentlyUsed]);
 
   const categories = useMemo(() => {
     const cats = new Set<string>();
@@ -156,7 +216,8 @@ export default function SongsPage() {
           title: `${song.title} (Copy)`,
           romanized_title: song.romanizedTitle,
           english_title: song.englishTitle,
-          slug: `${song.slug}-copy`,
+          // Generate a unique slug for the copy to avoid unique constraint violation
+          slug: `${song.slug || "song"}-copy-${Date.now().toString(36)}`,
           language: song.language,
           secondary_language: song.secondaryLanguage,
           category: song.category,
@@ -307,14 +368,14 @@ export default function SongsPage() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search songs, lyrics, artists..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search in Telugu, English, Romanized, artist, lyrics..."
+                value={rawSearch}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 className="w-full pl-12 pr-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-gold/50 focus:border-transparent"
               />
-              {searchQuery && (
+              {rawSearch && (
                 <button
-                  onClick={() => setSearchQuery("")}
+                  onClick={() => { setRawSearch(""); handleSearchChange(""); }}
                   className="absolute right-3 top-1/2 -translate-y-1/2"
                 >
                   <X className="w-4 h-4 text-muted-foreground" />
@@ -387,6 +448,55 @@ export default function SongsPage() {
               </button>
             </div>
           </div>
+
+          {/* Letter Browser */}
+          <div className="mt-3">
+            <div className="flex items-center gap-1 flex-wrap">
+              <button
+                onClick={() => setLetterFilter(null)}
+                className={cn(
+                  "px-2 py-1 text-xs rounded-md transition-all font-medium",
+                  letterFilter === null
+                    ? "bg-brand-gold text-brand-darker"
+                    : "text-muted-foreground hover:text-white hover:bg-white/5"
+                )}
+              >
+                All
+              </button>
+              {languageFilter === "telugu" || languageFilter === "all" ? (
+                TELUGU_LETTERS.map((letter) => (
+                  <button
+                    key={letter}
+                    onClick={() => setLetterFilter(letterFilter === letter ? null : letter)}
+                    className={cn(
+                      "px-2 py-1 text-xs rounded-md transition-all font-medium",
+                      letterFilter === letter
+                        ? "bg-brand-gold text-brand-darker"
+                        : "text-muted-foreground hover:text-white hover:bg-white/5"
+                    )}
+                  >
+                    {letter}
+                  </button>
+                ))
+              ) : null}
+              {languageFilter === "english" || languageFilter === "all" ? (
+                ENGLISH_LETTERS.map((letter) => (
+                  <button
+                    key={letter}
+                    onClick={() => setLetterFilter(letterFilter === letter.toLowerCase() ? null : letter.toLowerCase())}
+                    className={cn(
+                      "px-2 py-1 text-xs rounded-md transition-all font-medium",
+                      letterFilter === letter.toLowerCase()
+                        ? "bg-brand-gold text-brand-darker"
+                        : "text-muted-foreground hover:text-white hover:bg-white/5"
+                    )}
+                  >
+                    {letter}
+                  </button>
+                ))
+              ) : null}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -431,15 +541,26 @@ export default function SongsPage() {
                 key={song.id}
                 className="group glass rounded-2xl p-5 hover:bg-white/[0.07] transition-all duration-300 relative"
               >
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start justify-between mb-3">
                   <div className="flex-1 min-w-0">
-                    <Link href={`/songs/${song.id}`} className="block">
-                      <h3 className="font-semibold text-white group-hover:text-brand-gold transition-colors truncate">
+                    <Link href={`/songs/${song.id}`} className="block group/title">
+                      <h3
+                        className="font-bold text-white group-hover/title:text-brand-gold transition-colors leading-snug"
+                        title={song.title}
+                        style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+                      >
                         {song.title}
                       </h3>
                     </Link>
-                    {song.romanizedTitle && (
-                      <p className="text-sm text-muted-foreground mt-1 truncate">{song.romanizedTitle}</p>
+                    {/* Artist / Composer */}
+                    {(song.artist || song.author || song.composer || song.lyricist) && (
+                      <p className="text-xs text-brand-gold/80 mt-1 truncate">
+                        {song.artist || song.author || song.composer || song.lyricist}
+                      </p>
+                    )}
+                    {/* Romanized title (subtitle) */}
+                    {song.romanizedTitle && song.romanizedTitle !== song.title && (
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate italic">{song.romanizedTitle}</p>
                     )}
                   </div>
                   <div className="relative ml-3">
@@ -530,12 +651,12 @@ export default function SongsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="px-2.5 py-1 rounded-full bg-white/5 text-[11px] text-muted-foreground capitalize font-medium">
+                <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+                  <span className="px-2 py-0.5 rounded-full bg-white/5 text-[10px] text-muted-foreground capitalize font-medium border border-white/8">
                     {song.language}
                   </span>
                   {song.category && (
-                    <span className="px-2.5 py-1 rounded-full bg-white/5 text-[11px] text-muted-foreground capitalize font-medium">
+                    <span className="px-2 py-0.5 rounded-full bg-brand-gold/10 text-[10px] text-brand-gold/80 capitalize font-medium">
                       {song.category}
                     </span>
                   )}
@@ -555,19 +676,16 @@ export default function SongsPage() {
                 <div className="flex items-center justify-between pt-3 border-t border-white/5">
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Clock className="w-3 h-3" />
-                    {song.sections?.length || 0} sections
+                    <span>{song.sections?.length || 0} sections</span>
+                    {song.favorite && <Star className="w-3 h-3 text-brand-gold fill-brand-gold ml-1" />}
                   </div>
-                  <div className="flex items-center gap-2">
-                    {song.favorite && (
-                      <Star className="w-4 h-4 text-brand-gold fill-brand-gold" />
-                    )}
-                    <button
-                      onClick={() => presentSong(song)}
-                      className="p-1.5 rounded-lg bg-brand-gold/10 text-brand-gold hover:bg-brand-gold/20 transition-colors"
-                    >
-                      <Play className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => presentSong(song)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-brand-gold/10 text-brand-gold hover:bg-brand-gold/20 transition-colors text-xs font-semibold"
+                  >
+                    <Play className="w-3 h-3" />
+                    Present
+                  </button>
                 </div>
               </div>
             ))}

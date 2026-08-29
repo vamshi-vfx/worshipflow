@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/app/providers";
 import { CommandPalette } from "@/components/command-palette";
+import { BrandLogo } from "@/components/brand-logo";
 import {
   Home,
   Music,
@@ -71,16 +72,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-brand-darker/90 backdrop-blur-xl border-b border-white/5">
         <div className="flex items-center justify-between h-full px-4 lg:px-6">
           <div className="flex items-center gap-6 xl:gap-8">
-            <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-gold to-brand-goldLight flex items-center justify-center shadow-lg shadow-brand-gold/20 group-hover:scale-105 transition-transform">
-                <Music className="w-4 h-4 text-brand-darker stroke-[2.5]" />
-              </div>
-              <div className="flex flex-col">
-                <span className="font-display text-base font-extrabold tracking-wider text-white">
-                  WORSHIP<span className="text-brand-gold font-sans font-light">FLOW</span>
-                </span>
-              </div>
-            </Link>
+            <BrandLogo variant="wordmark" href="/" />
 
             {/* Desktop Primary Nav */}
             <nav className="hidden lg:flex items-center gap-0.5">
@@ -197,6 +189,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsMobileNavOpen(false)} />
           <div className="absolute left-0 top-16 bottom-0 w-72 bg-brand-darker border-r border-white/10 overflow-y-auto p-4 flex flex-col justify-between">
             <div className="space-y-1">
+              {/* Mobile drawer brand header */}
+              <div className="px-3 pb-4 mb-2 border-b border-white/5">
+                <BrandLogo variant="wordmark" href="/" />
+              </div>
               <p className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Navigation</p>
               {primaryNav.map((item) => {
                 const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));

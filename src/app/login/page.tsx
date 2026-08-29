@@ -3,9 +3,10 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Music, Eye, EyeOff, Mail, Lock, Sparkles, ArrowRight, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
 import { useAuth } from "@/app/providers";
 import { useToast } from "@/components/toast";
+import { BrandLogo } from "@/components/brand-logo";
 
 export default function LoginPage() {
   return (
@@ -100,16 +101,9 @@ function LoginForm() {
       <div className="w-full max-w-md space-y-6">
         {/* Branding Header */}
         <div className="text-center">
-          <Link href="/" className="inline-flex items-center gap-2.5 mb-3 group">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-gold to-brand-goldLight flex items-center justify-center shadow-xl shadow-brand-gold/20 group-hover:scale-105 transition-transform">
-              <Music className="w-6 h-6 text-brand-darker stroke-[2.5]" />
-            </div>
-          </Link>
-          <h1 className="font-display text-3xl font-extrabold text-white tracking-tight">
-            WORSHIP<span className="text-brand-gold font-sans font-light">FLOW</span>
-          </h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            Smart Church Lyrics & Worship Presentation Platform
+          <BrandLogo variant="full" href="/" className="w-[180px] h-[180px] mx-auto" />
+          <p className="text-sm text-muted-foreground mt-2">
+            Smart Church Lyrics &amp; Worship Presentation Platform
           </p>
         </div>
 

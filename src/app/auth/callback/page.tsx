@@ -2,8 +2,9 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Music, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { BrandLogo } from "@/components/brand-logo";
 
 type VerificationState = "loading" | "success" | "error";
 
@@ -97,13 +98,8 @@ function AuthCallbackContent() {
     <div className="min-h-screen bg-brand-darker flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-6">
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-brand-gold/15 mb-3 shadow-lg">
-            <Music className="w-7 h-7 text-brand-gold" />
-          </div>
-          <h1 className="font-display text-3xl font-extrabold text-white">
-            WORSHIP<span className="text-brand-gold font-sans font-light">FLOW</span>
-          </h1>
-          <p className="text-xs text-muted-foreground mt-1">Smart Church Lyrics & Worship Presentation Platform</p>
+          <BrandLogo variant="full" href="/" className="w-[160px] h-[160px] mx-auto" />
+          <p className="text-xs text-muted-foreground mt-1">Smart Church Lyrics &amp; Worship Presentation Platform</p>
         </div>
 
         <div className="glass rounded-2xl p-8 text-center border border-white/10 shadow-2xl backdrop-blur-xl">

@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/app/providers";
 import { db } from "@/services/database";
+import { generateSafeSlug } from "@/services/database";
 import { useToast } from "@/components/toast";
 import type { Song, SongSection, LyricLine, Language, SectionType, DisplayMode } from "@/types";
 
@@ -221,7 +222,7 @@ function SongEditorInner() {
       if (!isNew && songIdToUse) {
         await db.updateSong(songIdToUse, payload, user.id);
       } else {
-        payload.slug = formData.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" + Date.now().toString().slice(-4);
+        payload.slug = generateSafeSlug(formData.title);
         const created = await db.createSong(payload, user.id);
         songIdToUse = created.id;
       }

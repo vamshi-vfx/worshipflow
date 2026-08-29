@@ -70,6 +70,10 @@ export const db = {
 
   async createSong(song: Record<string, unknown>, userId: string) {
     const dbPayload = formatSongModelToDb(song, userId);
+    // Guarantee slug is always non-empty and unique for this insert
+    if (!dbPayload.slug || !dbPayload.slug.trim()) {
+      dbPayload.slug = generateSafeSlug(song.title as string | undefined);
+    }
     console.log("[WF DEBUG] INSERT PAYLOAD:", dbPayload);
     const { data, error } = await supabase
       .from("songs")
@@ -851,7 +855,100 @@ export const db = {
     }
     return data || [];
   },
+
+  // ─── Bible ────────────────────────────────────────────────────────────────
+
+  async getBibleTranslations() {
+    const { data, error } = await supabase
+      .from("bible_translations")
+      .select("*")
+      .order("is_default", { ascending: false });
+    if (error) { console.error("db.getBibleTranslations error:", error.message); return []; }
+    return data || [];
+  },
+
+  async getBibleBooks(translationId: string) {
+    const { data, error } = await supabase
+      .from("bible_books")
+      .select("id, book_number, name, name_english, name_short, testament, chapter_count, verse_count")
+      .eq("translation_id", translationId)
+      .order("book_number", { ascending: true });
+    if (error) { console.error("db.getBibleBooks error:", error.message); return []; }
+    return data || [];
+  },
+
+  async getBibleChapters(bookId: string) {
+    const { data, error } = await supabase
+      .from("bible_chapters")
+      .select("id, chapter_number, verse_count")
+      .eq("book_id", bookId)
+      .order("chapter_number", { ascending: true });
+    if (error) { console.error("db.getBibleChapters error:", error.message); return []; }
+    return data || [];
+  },
+
+  async getBibleVerses(chapterId: string) {
+    const { data, error } = await supabase
+      .from("bible_verses")
+      .select("id, verse_number, text")
+      .eq("chapter_id", chapterId)
+      .order("verse_number", { ascending: true });
+    if (error) { console.error("db.getBibleVerses error:", error.message); return []; }
+    return data || [];
+  },
+
+  async searchBibleVerses(translationId: string, query: string, limit = 30) {
+    if (!query.trim()) return [];
+    const { data, error } = await supabase
+      .from("bible_verses")
+      .select(`
+        id, verse_number, text,
+        chapter:bible_chapters(chapter_number),
+        book:bible_books(name, name_english, book_number, testament)
+      `)
+      .eq("translation_id", translationId)
+      .textSearch("text", query.trim(), { type: "plain" })
+      .limit(limit);
+    if (error) { console.error("db.searchBibleVerses error:", error.message); return []; }
+    return data || [];
+  },
+
+  async getBibleVerse(chapterId: string, verseNumber: number) {
+    const { data, error } = await supabase
+      .from("bible_verses")
+      .select("id, verse_number, text")
+      .eq("chapter_id", chapterId)
+      .eq("verse_number", verseNumber)
+      .maybeSingle();
+    if (error) { console.error("db.getBibleVerse error:", error.message); return null; }
+    return data;
+  },
+
+  async getBibleVerseRange(chapterId: string, startVerse: number, endVerse: number) {
+    const { data, error } = await supabase
+      .from("bible_verses")
+      .select("id, verse_number, text")
+      .eq("chapter_id", chapterId)
+      .gte("verse_number", startVerse)
+      .lte("verse_number", endVerse)
+      .order("verse_number", { ascending: true });
+    if (error) { console.error("db.getBibleVerseRange error:", error.message); return []; }
+    return data || [];
+  },
+
+  async getBibleStats(translationId: string) {
+    const { count: bookCount } = await supabase
+      .from("bible_books")
+      .select("*", { count: "exact", head: true })
+      .eq("translation_id", translationId);
+    const { count: verseCount } = await supabase
+      .from("bible_verses")
+      .select("*", { count: "exact", head: true })
+      .eq("translation_id", translationId);
+    return { books: bookCount || 0, verses: verseCount || 0 };
+  },
 };
+
 
 // Helper: Format DB row to TypeScript Song interface
 function formatSongDbToModel(row: any): Song {
@@ -897,6 +994,23 @@ function formatSongDbToModel(row: any): Song {
   };
 }
 
+/**
+ * Generates a guaranteed non-empty, URL-safe slug for any title including Telugu/Unicode.
+ * Strategy: extract Latin characters from title, then append a timestamp+random suffix
+ * to ensure uniqueness (avoids unique constraint violations for non-Latin scripts).
+ */
+export function generateSafeSlug(title?: string): string {
+  const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  if (!title || !title.trim()) return `song-${suffix}`;
+  // Keep only ASCII-safe chars, collapse repeated hyphens
+  const latinPart = title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return latinPart ? `${latinPart}-${suffix}` : `song-${suffix}`;
+}
+
 // Helper: Format TypeScript Song payload to DB column names
 function formatSongModelToDb(model: any, userId?: string): any {
   const db: any = {};
@@ -908,7 +1022,10 @@ function formatSongModelToDb(model: any, userId?: string): any {
   if (model.englishTitle !== undefined || model.english_title !== undefined) {
     db.english_title = model.englishTitle ?? model.english_title;
   }
-  if (model.slug !== undefined) db.slug = model.slug;
+  // Always regenerate a safe slug if slug is missing, empty, or being set for the first time
+  if (model.slug !== undefined) {
+    db.slug = model.slug && model.slug.trim() ? model.slug : generateSafeSlug(model.title);
+  }
   if (model.language !== undefined) db.language = model.language;
   if (model.secondaryLanguage !== undefined || model.secondary_language !== undefined) {
     db.secondary_language = model.secondaryLanguage ?? model.secondary_language;

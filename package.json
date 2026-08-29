@@ -11,7 +11,12 @@
     "typecheck": "tsc --noEmit",
     "postinstall": "node scripts/copy-pdf-worker.js",
     "prepare": "node scripts/copy-pdf-worker.js",
-    "prebuild": "node scripts/copy-pdf-worker.js"
+    "prebuild": "node scripts/copy-pdf-worker.js",
+    "repair:songs": "node scripts/repair-song-titles.mjs",
+    "repair:songs:dry": "node scripts/repair-song-titles.mjs --dry-run",
+    "import:bible": "node scripts/import-bible.mjs",
+    "import:bible:dry": "node scripts/import-bible.mjs --dry-run",
+    "validate:bible": "node scripts/validate-bible.mjs"
   },
   "keywords": [
     "church",

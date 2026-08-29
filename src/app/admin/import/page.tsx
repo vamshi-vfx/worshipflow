@@ -256,7 +256,7 @@ export default function ContentImportPage() {
       return;
     }
 
-    const validItems = parsedItems.filter((item) => item.status === "valid" || (item.status === "duplicate" && item.resolution === "create_new"));
+    const validItems = parsedItems.filter((item) => item.status === "valid" || (item.status === "duplicate" && (item.resolution === "create_new" || item.resolution === "merge")));
     const duplicateItems = parsedItems.filter((item) => item.status === "duplicate" && item.resolution === "skip");
 
     const itemsToImport = selectedItems.size > 0 ? parsedItems.filter((item) => selectedItems.has(item.id)) : validItems;
@@ -341,7 +341,13 @@ export default function ContentImportPage() {
               favorite: false,
             };
 
-            const createdSong = await db.createSong(newSongPayload, user.id);
+            let createdSong: any;
+            if (item.status === "duplicate" && item.resolution === "merge" && item.duplicateOfId) {
+              // Update existing song instead of creating a new one
+              createdSong = await db.updateSong(item.duplicateOfId, newSongPayload, user.id);
+            } else {
+              createdSong = await db.createSong(newSongPayload, user.id);
+            }
 
             if (parsed.sections && parsed.sections.length > 0 && createdSong?.id) {
               for (let sIdx = 0; sIdx < parsed.sections.length; sIdx++) {
@@ -827,13 +833,30 @@ Was blind but now I see`;
                   </div>
 
                   {item.status === "duplicate" && (
-                    <div className="p-3 rounded-xl bg-white/5 border border-white/5 flex flex-wrap items-center justify-between gap-3 text-xs">
-                      <span className="text-muted-foreground">Duplicate resolution:</span>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => handleSetResolution(item.id, "skip")} className={cn("px-3 py-1 rounded-lg font-semibold transition-colors", item.resolution === "skip" ? "bg-yellow-500 text-brand-darker font-bold" : "bg-white/5 text-white/80 hover:text-white")}>
-                          Skip This Song
+                    <div className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-2 text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-muted-foreground">Duplicate resolution:</span>
+                        {item.duplicateOfId && (
+                          <span className="text-yellow-400/80 font-mono text-[11px]">Matches: {item.duplicateOfId.slice(0, 8)}…</span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => handleSetResolution(item.id, "skip")}
+                          className={cn("px-3 py-1.5 rounded-lg font-semibold transition-colors flex items-center gap-1.5", item.resolution === "skip" ? "bg-yellow-500 text-brand-darker font-bold" : "bg-white/5 text-white/80 hover:text-white")}
+                        >
+                          Skip
                         </button>
-                        <button onClick={() => handleSetResolution(item.id, "create_new")} className={cn("px-3 py-1 rounded-lg font-semibold transition-colors", item.resolution === "create_new" ? "bg-brand-gold text-brand-darker font-bold" : "bg-white/5 text-white/80 hover:text-white")}>
+                        <button
+                          onClick={() => handleSetResolution(item.id, "merge")}
+                          className={cn("px-3 py-1.5 rounded-lg font-semibold transition-colors flex items-center gap-1.5", item.resolution === "merge" ? "bg-blue-500 text-white font-bold" : "bg-white/5 text-white/80 hover:text-white")}
+                        >
+                          Update Existing
+                        </button>
+                        <button
+                          onClick={() => handleSetResolution(item.id, "create_new")}
+                          className={cn("px-3 py-1.5 rounded-lg font-semibold transition-colors flex items-center gap-1.5", item.resolution === "create_new" ? "bg-brand-gold text-brand-darker font-bold" : "bg-white/5 text-white/80 hover:text-white")}
+                        >
                           Import as New Copy
                         </button>
                       </div>
