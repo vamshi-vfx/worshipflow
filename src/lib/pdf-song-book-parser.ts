@@ -258,8 +258,14 @@ export async function parseOcrPdfSongBook(
 
     let tesseract: any;
     try {
-      const tesseractModule = await import("tesseract.js");
-      tesseract = (tesseractModule as any).default || tesseractModule;
+      // Keep OCR optional: avoid making the production bundle fail when the
+      // optional tesseract.js dependency is not installed.
+      const loadOptionalModule = new Function(
+        "modulePath",
+        "return import(modulePath)"
+      ) as (modulePath: string) => Promise<any>;
+      const tesseractModule = await loadOptionalModule("tesseract.js");
+      tesseract = tesseractModule.default || tesseractModule;
     } catch {
       return { filename, format: "pdf", items: [], errors: ["OCR requires tesseract.js. Install it to enable scanned PDF import."], pageCount: pdf.numPages, detectedSongs: 0, isScanned: true };
     }
