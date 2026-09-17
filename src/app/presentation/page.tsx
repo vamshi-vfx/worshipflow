@@ -102,7 +102,7 @@ function PresentationConsole() {
   const [currentService, setCurrentService] = useState<Service | null>(null);
   const [serviceItemIndex, setServiceItemIndex] = useState(0);
 
-  const [allSlides, setAllSlides] = useState<{ id: string; primaryText: string; secondaryText?: string; label?: string }[]>([]);
+  const [allSlides, setAllSlides] = useState<{ id: string; primaryText: string; secondaryText?: string; label?: string; mediaUrl?: string; mediaType?: string }[]>([]);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [selectedTheme, setSelectedTheme] = useState<Theme>(THEMES[0]);
   const [languageMode, setLanguageMode] = useState<DisplayMode>("telugu");
@@ -220,8 +220,15 @@ function PresentationConsole() {
         console.error(e);
       }
     } else {
+      const rawMedia = localStorage.getItem("church-lyrics-current-media");
+      if (rawMedia) {
+        try {
+          const media = JSON.parse(rawMedia);
+          setAllSlides([{ id: `media-${media.id}`, primaryText: media.name || "Media", label: "Media", mediaUrl: media.url, mediaType: media.type }]);
+        } catch (e) { console.error("Media presentation load error", e); }
+      }
       const songs = await db.getSongs(user?.id);
-      if (songs.length > 0) {
+      if (!rawMedia && songs.length > 0) {
         const fullSong = await db.getSongWithSections(songs[0].id, user?.id);
         setCurrentSong(fullSong || songs[0]);
         buildSlidesFromSong(fullSong || songs[0]);
@@ -523,9 +530,8 @@ function PresentationConsole() {
               </div>
             ) : currentSlide ? (
               <div className="space-y-4">
-                <p className="text-2xl sm:text-3xl font-extrabold text-white leading-relaxed text-balance">
-                  {currentSlide.primaryText}
-                </p>
+                {currentSlide.mediaUrl && currentSlide.mediaType === "video" ? <video src={currentSlide.mediaUrl} autoPlay loop muted controls className="max-h-[55vh] w-full rounded-xl object-contain" /> : currentSlide.mediaUrl ? <img src={currentSlide.mediaUrl} alt={currentSlide.primaryText} className="max-h-[55vh] w-full rounded-xl object-contain" /> : null}
+                {!currentSlide.mediaUrl && <p className="text-2xl sm:text-3xl font-extrabold text-white leading-relaxed text-balance">{currentSlide.primaryText}</p>}
                 {currentSlide.secondaryText && (
                   <p className="text-base sm:text-lg text-brand-gold italic text-balance font-medium">
                     {currentSlide.secondaryText}

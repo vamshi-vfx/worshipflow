@@ -20,7 +20,7 @@ const DEFAULT_THEME: Theme = {
 };
 
 export default function PresentationDisplayPage() {
-  const [slide, setSlide] = useState<{ primaryText: string; secondaryText?: string; sectionLabel?: string } | null>(null);
+  const [slide, setSlide] = useState<{ primaryText: string; secondaryText?: string; sectionLabel?: string; mediaUrl?: string; mediaType?: string } | null>(null);
   const [isBlackScreen, setIsBlackScreen] = useState(false);
   const [isBlankScreen, setIsBlankScreen] = useState(false);
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
@@ -160,6 +160,14 @@ export default function PresentationDisplayPage() {
       }
     }
 
+    const currentMediaRaw = localStorage.getItem("church-lyrics-current-media");
+    if (!currentSongRaw && !currentBibleRaw && currentMediaRaw) {
+      try {
+        const media = JSON.parse(currentMediaRaw);
+        setSlide({ primaryText: media.name || "Media", sectionLabel: "Media", mediaUrl: media.url, mediaType: media.type });
+      } catch (e) { console.error("Display media parse error", e); }
+    }
+
     return () => unsubscribe();
   }, [subscribe]);
 
@@ -198,6 +206,7 @@ export default function PresentationDisplayPage() {
       <div className="relative z-10 w-full max-w-[95vw] mx-auto space-y-6 break-words whitespace-pre-wrap">
         {slide ? (
           <>
+            {slide.mediaUrl && slide.mediaType === "video" ? <video src={slide.mediaUrl} autoPlay loop muted controls className="max-h-[75vh] max-w-full rounded-xl object-contain" /> : slide.mediaUrl ? <img src={slide.mediaUrl} alt={slide.primaryText} className="max-h-[75vh] max-w-full rounded-xl object-contain" /> : null}
             <p
               className="font-bold text-white leading-relaxed text-balance transition-all duration-200"
               style={{
