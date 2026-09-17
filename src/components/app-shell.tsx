@@ -36,6 +36,7 @@ const primaryNav = [
   { label: "Favorites", href: "/favorites", icon: Star },
   { label: "Services", href: "/services", icon: Calendar },
   { label: "Present", href: "/presentation", icon: Play },
+  { label: "Remote", href: "/remote", icon: Radio },
   { label: "Bible", href: "/bible", icon: BookOpen },
   { label: "Announcements", href: "/announcements", icon: Megaphone },
 ];
