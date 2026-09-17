@@ -535,14 +535,14 @@ export default function SmartImportPage() {
         lines: section.lines.map((line, order) => ({
           client_id: line.id, order, primary_text: line.text, secondary_text: "",
           language: line.language === "romanized-telugu" ? "telugu" : line.language,
-          display_mode: detectedLanguage === "hindi" ? "hindi" : detectedLanguage === "english" ? "english" : detectedLanguage === "mixed" ? "mixed" : "telugu"
+          display_mode: detectedLanguage === "english" ? "english" : detectedLanguage === "mixed" ? "mixed" : "telugu"
         }))
       }));
       const atomicSlides = slides.map((slide) => ({
         section_client_id: String(slide.sectionOrder), section_order: slide.sectionOrder,
         slide_number: slide.slideNumber, order: slide.slideNumber,
         primary_text: slide.primaryText, secondary_text: slide.secondaryText || "",
-        line_ids: slide.lineIds || [], display_mode: detectedLanguage === "hindi" ? "hindi" : detectedLanguage === "english" ? "english" : detectedLanguage === "mixed" ? "mixed" : "telugu"
+        line_ids: slide.lineIds || [], display_mode: detectedLanguage === "english" ? "english" : detectedLanguage === "mixed" ? "mixed" : "telugu"
       }));
       const savedSongId = await db.saveSongBundle({
         id: songId || null, title: songTitle.trim() || "Untitled Song",
