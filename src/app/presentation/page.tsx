@@ -450,6 +450,15 @@ function PresentationConsole() {
             <ExternalLink className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Open TV Display</span>
           </button>
+          <Link
+            href="/remote"
+            target="_blank"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs font-bold hover:bg-white/15 border border-white/10 transition-all"
+            title="Open mobile remote and generate QR pairing"
+          >
+            <Wifi className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Mobile Remote</span>
+          </Link>
 
           {/* Blackout Button */}
           <button
