@@ -25,8 +25,16 @@ export default function PresentationDisplayPage() {
   const [isBlankScreen, setIsBlankScreen] = useState(false);
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
   const [languageMode, setLanguageMode] = useState<DisplayMode>("telugu");
+  const [sessionId, setSessionId] = useState("");
 
-  const { sendMessage, subscribe } = useDisplaySync(true);
+  // A display can be opened from the operator's pairing QR/link. The random
+  // session id is the capability token; no song or service data is put in it.
+  useEffect(() => {
+    const value = new URLSearchParams(window.location.search).get("session");
+    if (value) setSessionId(value);
+  }, []);
+
+  const { sendMessage, subscribe } = useDisplaySync(true, sessionId);
 
   // The operator and projector must render the same persisted deck. Older
   // localStorage songs have no slides, so retain a line-based fallback.
