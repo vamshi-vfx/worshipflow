@@ -167,17 +167,16 @@ function PresentationConsole() {
         const song: Song = JSON.parse(rawSong);
         setCurrentSong(song);
 
-        if (song.sections && song.sections.length > 0) {
-          buildSlidesFromSong(song);
-        } else {
-          const fullSong = await db.getSongWithSections(song.id, user?.id);
-          if (fullSong) {
-            setCurrentSong(fullSong);
-            buildSlidesFromSong(fullSong);
-          } else {
-            buildSlidesFromSong(song);
-          }
-        }
+        // Always hydrate from the database. The imported song's persisted
+        // song_slides are the source of truth; rebuilding one slide per lyric
+        // line changes both grouping and edited slide content.
+        const fullSong = await db.getSongWithSections(song.id, user?.id);
+        const hydratedSong = fullSong || song;
+        setCurrentSong(hydratedSong);
+        buildSlidesFromSong(hydratedSong);
+        try {
+          localStorage.setItem("church-lyrics-current-song", JSON.stringify(hydratedSong));
+        } catch { /* storage may be unavailable */ }
       } catch (e) {
         console.error(e);
       }
@@ -235,26 +234,37 @@ function PresentationConsole() {
 
   const buildSlidesFromSong = (song: Song) => {
     const slides: { id: string; primaryText: string; secondaryText?: string; label?: string }[] = [];
+    const savedSlides = Array.isArray(song.slides) ? song.slides : [];
 
-    if (song.sections && song.sections.length > 0) {
-      song.sections.forEach((sec) => {
-        sec.lines?.forEach((line) => {
+    if (savedSlides.length > 0) {
+      // Preserve persisted order and exact text, including manually edited
+      // secondary text. Never split these back into lyric lines.
+      [...savedSlides]
+        .sort((a, b) => (a.order ?? a.slideNumber) - (b.order ?? b.slideNumber))
+        .forEach((slide) => {
+          const section = song.sections?.find((sec) => sec.id === slide.sectionId || sec.order === slide.sectionOrder);
           slides.push({
-            id: line.id,
-            primaryText: line.primaryText || (line as any).primary_text,
-            secondaryText: line.secondaryText || (line as any).secondary_text,
-            label: sec.label,
+            id: slide.id,
+            primaryText: slide.primaryText || " ",
+            secondaryText: slide.secondaryText || undefined,
+            label: section?.label || "Lyrics",
           });
         });
-      });
-    } else if (song.lyrics) {
-      song.lyrics.split("\n").filter(Boolean).forEach((line, i) => {
-        slides.push({
-          id: `line-${i}`,
-          primaryText: line,
-          label: "Lyrics",
+    } else if (song.sections && song.sections.length > 0) {
+      // Backward-compatible fallback for songs created before song_slides.
+      song.sections.forEach((sec) => sec.lines?.forEach((line) => {
+        const primaryText = line.primaryText || (line as any).primary_text || "";
+        if (primaryText.trim()) slides.push({
+          id: line.id,
+          primaryText,
+          secondaryText: line.secondaryText || (line as any).secondary_text || undefined,
+          label: sec.label,
         });
-      });
+      }));
+    } else if (song.lyrics) {
+      song.lyrics.split(/\r?\n/).filter((line) => line.trim()).forEach((line, i) =>
+        slides.push({ id: `line-${i}`, primaryText: line, label: "Lyrics" })
+      );
     }
 
     setAllSlides(slides);
@@ -653,10 +663,13 @@ function PresentationConsole() {
                 .map((song) => (
                   <div
                     key={song.id}
-                    onClick={() => {
-                      setCurrentSong(song);
-                      buildSlidesFromSong(song);
-                      localStorage.setItem("church-lyrics-current-song", JSON.stringify(song));
+                    onClick={async () => {
+                      // Fetch the saved deck before broadcasting or storing the
+                      // song, otherwise the projector can see a line fallback.
+                      const hydratedSong = await db.getSongWithSections(song.id, user?.id) || song;
+                      setCurrentSong(hydratedSong);
+                      buildSlidesFromSong(hydratedSong);
+                      localStorage.setItem("church-lyrics-current-song", JSON.stringify(hydratedSong));
                       setIsSearchOpen(false);
                       toast.addToast("success", `Switched to "${song.title}"`);
                     }}

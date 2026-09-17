@@ -164,17 +164,18 @@ export default function SongsPage() {
   const deleteSong = async (id: string) => {
     if (!user) return;
     try {
-      const { data: serviceItems, error: countError } = await supabase
+      const { count: usageCount, error: countError } = await supabase
         .from("service_items")
         .select("id", { count: "exact", head: true })
         .eq("song_id", id);
 
       if (countError) throw countError;
 
-      const usageCount = serviceItems?.length || 0;
-      if (usageCount > 0) {
+      // With head:true Supabase intentionally returns no data array; use the exact count.
+      const linkedServiceCount = usageCount || 0;
+      if (linkedServiceCount > 0) {
         const confirmed = confirm(
-          `This song is used in ${usageCount} service${usageCount === 1 ? "" : "s"}.\n\nDeleting it will remove it from those services.\n\nAre you sure you want to delete this song?`
+          `This song is used in ${linkedServiceCount} service${linkedServiceCount === 1 ? "" : "s"}.\n\nDeleting it will remove it from those services.\n\nAre you sure you want to delete this song?`
         );
         if (!confirmed) return;
       } else if (!confirm("Are you sure you want to delete this song?")) {
@@ -307,7 +308,10 @@ export default function SongsPage() {
           );
         }
 
-        setSongs((prev) => [newSong as Song, ...prev]);
+        // The insert response uses snake_case DB columns; normalize it before putting it
+        // into the UI state, which expects the Song model's camelCase fields.
+        const normalizedCopy = await db.getSong(newSong.id, user.id);
+        setSongs((prev) => [normalizedCopy || (newSong as Song), ...prev]);
         toast.addToast("success", "Song duplicated");
       }
       setMenuOpenId(null);

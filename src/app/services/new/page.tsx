@@ -53,7 +53,11 @@ function NewServicePageContent() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const autosaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The query string never changes after the first render. Keep the id created by
+  // the first autosave so later autosaves update instead of inserting duplicates.
+  const persistedServiceIdRef = useRef<string | null>(serviceId);
+  const saveLockRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -151,70 +155,22 @@ function NewServicePageContent() {
 
   const persistServiceData = useCallback(async () => {
     if (!user || !name.trim()) return;
-    setError(null);
-
-    try {
-      let currentServiceId = serviceId;
-
-      if (currentServiceId) {
-        const existingService = await db.getService(currentServiceId, user.id);
-        if (existingService) {
-          await db.updateService(currentServiceId, {
-            name,
-            date,
-            description,
-            status,
-          }, user.id);
-
-          const existingItems = await db.getServiceItems(currentServiceId);
-          const existingItemIds = existingItems.map((i) => i.id);
-          if (existingItemIds.length > 0) {
-            await db.deleteServiceItems(existingItemIds);
-          }
-
-          if (items.length > 0) {
-            await db.createServiceItems(items.map((item) => ({
-              service_id: currentServiceId,
-              type: item.type,
-              song_id: item.songId,
-              bible_reference: item.bibleReference,
-              bible_text: item.bibleText,
-              announcement_id: item.announcementId,
-              order: item.order,
-              notes: item.notes,
-            })));
-          }
-          return;
-        }
-      }
-
-      const service = await db.createService({
-        name,
-        date,
-        description,
-        status,
-      }, user.id);
-
-      currentServiceId = service.id;
-
-      if (items.length > 0) {
-        await db.createServiceItems(items.map((item) => ({
-          service_id: currentServiceId,
-          type: item.type,
-          song_id: item.songId,
-          bible_reference: item.bibleReference,
-          bible_text: item.bibleText,
-          announcement_id: item.announcementId,
-          order: item.order,
-          notes: item.notes,
-        })));
-      }
-    } catch (e) {
-      console.error("Failed to persist service", e);
-      setError("Failed to save service");
-      throw e;
-    }
-  }, [user, name, date, description, status, items, serviceId, db]);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("A valid service date is required");
+    if (!(["draft", "ready", "live", "completed", "archived"] as string[]).includes(status)) throw new Error("Invalid service status");
+    if (saveLockRef.current) return saveLockRef.current;
+    const run = (async () => {
+      const itemPayload = items.map((item, index) => ({
+        type: item.type, song_id: item.songId || null, bible_reference: item.bibleReference || null,
+        bible_text: item.bibleText || null, announcement_id: item.announcementId || null,
+        order: Number.isInteger(item.order) ? item.order : index, notes: item.notes || null
+      }));
+      const id = await db.saveServiceBundle({ id: persistedServiceIdRef.current || null,
+        name: name.trim(), date, description: description.trim(), status }, itemPayload, user.id);
+      persistedServiceIdRef.current = id;
+    })();
+    saveLockRef.current = run;
+    try { await run; } finally { if (saveLockRef.current === run) saveLockRef.current = null; }
+  }, [user, name, date, description, status, items]);
 
   useEffect(() => {
     if (!name) return;

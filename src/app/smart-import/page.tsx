@@ -528,156 +528,38 @@ export default function SmartImportPage() {
   const persistSongData = useCallback(async () => {
     if (!user || slides.length === 0) return;
     setError(null);
-
     try {
-      let currentSongId = songId;
-
-      if (currentSongId) {
-        const existingSong = await db.getSong(currentSongId, user.id);
-        if (existingSong) {
-          await db.updateSong(currentSongId, {
-            title: songTitle || existingSong.title,
-            romanized_title: songTitle || existingSong.romanizedTitle,
-            language: detectedLanguage === "romanized-telugu" ? "telugu" : detectedLanguage,
-            lyrics: rawLyrics,
-            updated_at: new Date().toISOString(),
-          }, user.id);
-
-          const existingSections = await db.getSongSections(currentSongId);
-          for (const section of existingSections) {
-            await db.deleteSongSection(section.id);
-          }
-
-          const existingSlides = await db.getSongSlides(currentSongId);
-          for (const slide of existingSlides) {
-            await db.deleteSongSlide(slide.id);
-          }
-
-          const sectionOrderToId: Record<number, string> = {};
-
-          for (const section of sections) {
-            const createdSection = await db.createSongSection({
-              song_id: currentSongId,
-              type: section.type,
-              label: section.label,
-              order: section.order,
-              repeat_count: 1,
-            });
-
-            const sectionId = (createdSection as any).id;
-            sectionOrderToId[section.order] = sectionId;
-
-            for (const line of section.lines) {
-              await db.createSongLine({
-                section_id: sectionId,
-                order: 0,
-                primary_text: line.text,
-                secondary_text: "",
-                language: line.language === "romanized-telugu" ? "telugu" : (line.language as any),
-                display_mode: "telugu",
-              });
-            }
-          }
-
-          for (const slide of slides) {
-            const sectionId = sectionOrderToId[slide.sectionOrder];
-            if (!sectionId) continue;
-
-            await db.createSongSlide({
-              song_id: currentSongId,
-              section_id: sectionId,
-              section_order: slide.sectionOrder,
-              slide_number: slide.slideNumber,
-              order: slide.slideNumber,
-              primary_text: slide.primaryText,
-              secondary_text: slide.secondaryText || "",
-              line_ids: slide.lineIds,
-              display_mode: "telugu",
-            });
-          }
-          return;
-        }
-      }
-
-      const safeTitle = songTitle.trim() || "Untitled Song";
-      const song = await db.createSong({
-        title: safeTitle,
-        romanized_title: safeTitle,
-        slug: generateSafeSlug(safeTitle),
+      const atomicSections = sections.map((section) => ({
+        client_id: String(section.order), type: section.type, label: section.label,
+        order: section.order, repeat_count: 1,
+        lines: section.lines.map((line, order) => ({
+          client_id: line.id, order, primary_text: line.text, secondary_text: "",
+          language: line.language === "romanized-telugu" ? "telugu" : line.language,
+          display_mode: detectedLanguage === "hindi" ? "hindi" : detectedLanguage === "english" ? "english" : detectedLanguage === "mixed" ? "mixed" : "telugu"
+        }))
+      }));
+      const atomicSlides = slides.map((slide) => ({
+        section_client_id: String(slide.sectionOrder), section_order: slide.sectionOrder,
+        slide_number: slide.slideNumber, order: slide.slideNumber,
+        primary_text: slide.primaryText, secondary_text: slide.secondaryText || "",
+        line_ids: slide.lineIds || [], display_mode: detectedLanguage === "hindi" ? "hindi" : detectedLanguage === "english" ? "english" : detectedLanguage === "mixed" ? "mixed" : "telugu"
+      }));
+      const savedSongId = await db.saveSongBundle({
+        id: songId || null, title: songTitle.trim() || "Untitled Song",
+        romanized_title: songTitle.trim() || "Untitled Song",
+        slug: generateSafeSlug(songTitle.trim() || "Untitled Song"),
         language: detectedLanguage === "romanized-telugu" ? "telugu" : detectedLanguage,
-        secondary_language: detectedLanguage === "mixed" ? "english" : undefined,
-        category: "worship",
-        lyrics: rawLyrics,
-        tags: [],
-        favorite: false,
-      }, user.id);
-
-      currentSongId = (song as any).id;
-      setSongId(currentSongId);
-
-      const sectionOrderToId: Record<number, string> = {};
-
-      for (const section of sections) {
-        const createdSection = await db.createSongSection({
-          song_id: currentSongId,
-          type: section.type,
-          label: section.label,
-          order: section.order,
-          repeat_count: 1,
-        });
-
-        const sectionId = (createdSection as any).id;
-        sectionOrderToId[section.order] = sectionId;
-
-        for (const line of section.lines) {
-          await db.createSongLine({
-            section_id: sectionId,
-            order: 0,
-            primary_text: line.text,
-            secondary_text: "",
-            language: line.language === "romanized-telugu" ? "telugu" : (line.language as any),
-            display_mode: "telugu",
-          });
-        }
-      }
-
-      for (const slide of slides) {
-        const sectionId = sectionOrderToId[slide.sectionOrder];
-        if (!sectionId) continue;
-
-        await db.createSongSlide({
-          song_id: currentSongId,
-          section_id: sectionId,
-          section_order: slide.sectionOrder,
-          slide_number: slide.slideNumber,
-          order: slide.slideNumber,
-          primary_text: slide.primaryText,
-          secondary_text: slide.secondaryText || "",
-          line_ids: slide.lineIds,
-          display_mode: "telugu",
-        });
-      }
+        secondary_language: detectedLanguage === "mixed" ? "english" : null,
+        category: "worship", lyrics: rawLyrics, tags: []
+      }, atomicSections, atomicSlides, user.id);
+      setSongId(savedSongId);
     } catch (e: any) {
-      const pgCode = e?.code || "";
-      const pgDetail = e?.details || e?.detail || "";
-      const pgMsg = e?.message || String(e);
-      console.error("[SongSave] Failed to persist song", {
-        code: pgCode,
-        message: pgMsg,
-        detail: pgDetail,
-        title: songTitle,
-        detectedLanguage,
-        slidesCount: slides.length,
-        sectionsCount: sections.length,
-      });
-      setError(
-        pgCode === "23505"
-          ? "A song with this title or slug already exists. Please change the title."
-          : "Failed to save song. Please check your connection and try again."
-      );
+      const message = e?.code === "23505" ? "A song with this title or slug already exists. Please change the title." : "Failed to save song. Please check your connection and try again.";
+      setError(message);
+      console.error("[SongSave] atomic save failed", e);
       throw e;
     }
-  }, [user, slides, sections, rawLyrics, detectedLanguage, songTitle, songId, db]);
+  }, [user, slides, sections, rawLyrics, detectedLanguage, songTitle, songId]);
 
   useEffect(() => {
     if (!songId || slides.length === 0) return;

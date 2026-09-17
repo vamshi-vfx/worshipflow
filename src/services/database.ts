@@ -14,9 +14,6 @@ export const db = {
     }
 
     const { data, error } = await query;
-    console.log("[WF DEBUG] SONG LIST USER:", userId);
-    console.log("[WF DEBUG] SONG LIST DATA:", data);
-    console.log("[WF DEBUG] SONG LIST ERROR:", error);
     if (error) {
       console.error("db.getSongs error:", error.message);
       return [];
@@ -46,7 +43,10 @@ export const db = {
     const song = await this.getSong(id, userId);
     if (!song) return null;
 
-    const sections = await this.getSongSections(id);
+    const [sections, persistedSlides] = await Promise.all([
+      this.getSongSections(id),
+      this.getSongSlides(id),
+    ]);
     const sectionsWithLines = await Promise.all(
       sections.map(async (section) => {
         const lines = await this.getSongLines(section.id);
@@ -65,7 +65,50 @@ export const db = {
       })
     );
 
-    return { ...song, sections: sectionsWithLines } as Song;
+    const slides = persistedSlides
+      .map((row: any, index: number) => ({
+        id: String(row.id || `slide-${index + 1}`),
+        songId: String(row.song_id || id),
+        sectionId: String(row.section_id || ""),
+        sectionOrder: Number(row.section_order ?? 0),
+        slideNumber: Number(row.slide_number ?? row.order ?? index + 1),
+        order: Number(row.order ?? row.slide_number ?? index + 1),
+        primaryText: String(row.primary_text ?? row.primaryText ?? ""),
+        secondaryText: row.secondary_text ?? row.secondaryText ?? undefined,
+        lineIds: Array.isArray(row.line_ids) ? row.line_ids.map(String) : [],
+        displayMode: row.display_mode || "telugu",
+      }))
+      .filter((slide) => slide.primaryText.trim().length > 0)
+      .sort((a, b) => a.order - b.order || a.slideNumber - b.slideNumber);
+
+    return { ...song, sections: sectionsWithLines, slides } as Song;
+  },
+
+  /** Load the saved slide deck without requiring section/line reconstruction. */
+  async getSongSlidesModel(songId: string) {
+    const rows = await this.getSongSlides(songId);
+    return rows
+      .map((row: any, index: number) => ({
+        id: String(row.id || `slide-${index + 1}`),
+        songId,
+        sectionId: String(row.section_id || ""),
+        sectionOrder: Number(row.section_order ?? 0),
+        slideNumber: Number(row.slide_number ?? row.order ?? index + 1),
+        order: Number(row.order ?? row.slide_number ?? index + 1),
+        primaryText: String(row.primary_text ?? row.primaryText ?? ""),
+        secondaryText: row.secondary_text ?? row.secondaryText ?? undefined,
+        lineIds: Array.isArray(row.line_ids) ? row.line_ids.map(String) : [],
+        displayMode: row.display_mode || "telugu",
+      }))
+      .filter((slide) => slide.primaryText.trim().length > 0)
+      .sort((a, b) => a.order - b.order || a.slideNumber - b.slideNumber);
+  },
+
+
+  async saveSongBundle(song: Record<string, unknown>, sections: Record<string, unknown>[], slides: Record<string, unknown>[], userId: string) {
+    const { data, error } = await supabase.rpc("save_song_bundle", { p_song: { ...song, id: song.id || null }, p_sections: sections, p_slides: slides });
+    if (error) throw error;
+    return data as string;
   },
 
   async createSong(song: Record<string, unknown>, userId: string) {
@@ -94,6 +137,7 @@ export const db = {
       .from("songs")
       .update({ ...dbPayload, updated_at: new Date().toISOString() })
       .eq("id", id)
+      .or(`created_by.eq.${userId},created_by.is.null`)
       .select()
       .single();
 
@@ -105,7 +149,8 @@ export const db = {
     const { error } = await supabase
       .from("songs")
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .or(`created_by.eq.${userId},created_by.is.null`);
 
     if (error) throw error;
   },
@@ -156,7 +201,7 @@ export const db = {
       .update(updates)
       .eq("id", id)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
     return data;
@@ -290,6 +335,12 @@ export const db = {
   },
 
   // Services
+  async saveServiceBundle(service: Record<string, unknown>, items: Record<string, unknown>[], userId: string) {
+    const { data, error } = await supabase.rpc("save_service_bundle", { p_service: { ...service, id: service.id || null }, p_items: items });
+    if (error) throw error;
+    return data as string;
+  },
+
   async getServices(userId: string) {
     const { data, error } = await supabase
       .from("services")
@@ -309,7 +360,8 @@ export const db = {
       .from("services")
       .select("*")
       .eq("id", id)
-      .single();
+      .eq("created_by", userId)
+      .maybeSingle();
 
     if (error) throw error;
     return data;
@@ -331,10 +383,12 @@ export const db = {
       .from("services")
       .update(updates)
       .eq("id", id)
+      .eq("created_by", userId)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
+    if (!data) throw new Error("Service not found or not owned by current user");
     return data;
   },
 
@@ -342,7 +396,8 @@ export const db = {
     const { error } = await supabase
       .from("services")
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .eq("created_by", userId);
 
     if (error) throw error;
   },
@@ -372,22 +427,27 @@ export const db = {
   },
 
   async createServiceItems(items: Record<string, unknown>[]) {
-    const dbPayload = items.map((item) => ({
-      service_id: item.service_id || item.serviceId,
-      type: item.type,
-      song_id: item.song_id || item.songId || null,
-      bible_reference: item.bible_reference || item.bibleReference || null,
-      bible_text: item.bible_text || item.bibleText || null,
-      announcement_id: item.announcement_id || item.announcementId || null,
-      order: item.order ?? 0,
-      notes: item.notes || null,
-    }));
-
-    const { error } = await supabase
-      .from("service_items")
-      .insert(dbPayload);
-
+    if (!items.length) return [];
+    const allowedTypes = new Set(["song", "bible", "announcement", "custom"]);
+    const dbPayload = items.map((item, index) => {
+      const serviceId = item.service_id ?? item.serviceId;
+      const type = item.type;
+      if (typeof serviceId !== "string" || !serviceId) throw new Error("Service item is missing service_id");
+      if (typeof type !== "string" || !allowedTypes.has(type)) throw new Error(`Invalid service item type: ${String(type)}`);
+      return {
+        service_id: serviceId,
+        type,
+        song_id: typeof item.song_id === "string" ? item.song_id : (typeof item.songId === "string" ? item.songId : null),
+        bible_reference: typeof item.bible_reference === "string" ? item.bible_reference : (typeof item.bibleReference === "string" ? item.bibleReference : null),
+        bible_text: typeof item.bible_text === "string" ? item.bible_text : (typeof item.bibleText === "string" ? item.bibleText : null),
+        announcement_id: typeof item.announcement_id === "string" ? item.announcement_id : (typeof item.announcementId === "string" ? item.announcementId : null),
+        order: Number.isInteger(item.order) ? item.order : index,
+        notes: typeof item.notes === "string" ? item.notes : null,
+      };
+    });
+    const { data, error } = await supabase.from("service_items").insert(dbPayload).select();
     if (error) throw error;
+    return data || [];
   },
 
   async deleteServiceItems(target: string | string[]) {

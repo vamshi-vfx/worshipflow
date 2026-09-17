@@ -90,6 +90,8 @@ export interface Song {
   lyrics: string;
   chords?: string;
   sections: SongSection[];
+  /** Persisted presentation slides, in operator-defined order. Older songs may omit this. */
+  slides?: Slide[];
   tags: string[];
   bibleReferences?: BibleReference[];
   audioUrl?: string;

@@ -86,6 +86,23 @@ CREATE POLICY "Song lines updatable by owner" ON public.song_lines FOR UPDATE US
 CREATE POLICY "Song lines deletable by owner" ON public.song_lines FOR DELETE USING (true);
 
 -- 6. CREATE MISSING TABLES IF NOT PRESENT
+-- Keep database constraints aligned with the editor's supported Hindi display mode.
+DO $$
+BEGIN
+  ALTER TABLE public.song_lines DROP CONSTRAINT IF EXISTS song_lines_display_mode_check;
+  ALTER TABLE public.song_lines ADD CONSTRAINT song_lines_display_mode_check
+    CHECK (display_mode IN ('telugu', 'english', 'hindi', 'transliteration', 'mixed', 'both'));
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE public.song_slides DROP CONSTRAINT IF EXISTS song_slides_display_mode_check;
+  ALTER TABLE public.song_slides ADD CONSTRAINT song_slides_display_mode_check
+    CHECK (display_mode IN ('telugu', 'english', 'hindi', 'transliteration', 'mixed', 'both'));
+EXCEPTION WHEN undefined_table THEN NULL;
+END $$;
+
 CREATE TABLE IF NOT EXISTS public.categories (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   slug TEXT NOT NULL UNIQUE,

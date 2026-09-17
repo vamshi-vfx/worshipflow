@@ -28,6 +28,27 @@ export default function PresentationDisplayPage() {
 
   const { sendMessage, subscribe } = useDisplaySync(true);
 
+  // The operator and projector must render the same persisted deck. Older
+  // localStorage songs have no slides, so retain a line-based fallback.
+  const getSongSlides = (song: any) => {
+    if (Array.isArray(song.slides) && song.slides.length > 0) {
+      return [...song.slides].sort((a: any, b: any) =>
+        Number(a.order ?? a.slideNumber ?? 0) - Number(b.order ?? b.slideNumber ?? 0)
+      ).map((s: any) => ({
+        primaryText: s.primaryText ?? s.primary_text ?? " ",
+        secondaryText: s.secondaryText ?? s.secondary_text ?? undefined,
+        sectionLabel: song.sections?.find((sec: any) => sec.id === s.sectionId || sec.order === s.sectionOrder)?.label || "Lyrics",
+      })).filter((s: any) => String(s.primaryText).trim());
+    }
+    const fallback: any[] = [];
+    song.sections?.forEach((sec: any) => sec.lines?.forEach((line: any) => {
+      const text = line.primaryText ?? line.primary_text ?? "";
+      if (String(text).trim()) fallback.push({ primaryText: text, secondaryText: line.secondaryText ?? line.secondary_text, sectionLabel: sec.label });
+    }));
+    if (!fallback.length && song.lyrics) song.lyrics.split(/\r?\n/).filter((x: string) => x.trim()).forEach((text: string) => fallback.push({ primaryText: text, sectionLabel: "Lyrics" }));
+    return fallback;
+  };
+
   // Send periodic heartbeats so operator knows display is live
   useEffect(() => {
     const timer = setInterval(() => {
@@ -58,16 +79,7 @@ export default function PresentationDisplayPage() {
         if (currentSongRaw) {
           try {
             const currentSong = JSON.parse(currentSongRaw);
-            const allSlides: any[] = [];
-            currentSong.sections?.forEach((sec: any) => {
-              sec.lines?.forEach((line: any) => {
-                allSlides.push({
-                  primaryText: line.primaryText || line.primary_text,
-                  secondaryText: line.secondaryText || line.secondary_text,
-                  sectionLabel: sec.label,
-                });
-              });
-            });
+            const allSlides = getSongSlides(currentSong);
 
             if (allSlides[msg.index]) {
               setSlide(allSlides[msg.index]);
@@ -122,13 +134,8 @@ export default function PresentationDisplayPage() {
     if (currentSongRaw) {
       try {
         const song = JSON.parse(currentSongRaw);
-        if (song.sections?.[0]?.lines?.[0]) {
-          setSlide({
-            primaryText: song.sections[0].lines[0].primaryText || song.sections[0].lines[0].primary_text,
-            secondaryText: song.sections[0].lines[0].secondaryText || song.sections[0].lines[0].secondary_text,
-            sectionLabel: song.sections[0].label,
-          });
-        }
+        const songSlides = getSongSlides(song);
+        if (songSlides[0]) setSlide(songSlides[0]);
       } catch (e) {
         console.error(e);
       }
@@ -169,7 +176,7 @@ export default function PresentationDisplayPage() {
 
   return (
     <div
-      className="fixed inset-0 flex flex-col justify-center items-center p-12 sm:p-20 text-center select-none overflow-hidden cursor-none"
+      className="fixed inset-0 flex flex-col justify-center items-center p-6 sm:p-12 text-center select-none overflow-auto cursor-none"
       style={{
         background: isGradient ? bgValue : bgValue,
         backgroundColor: isGradient ? undefined : bgValue,
@@ -188,7 +195,7 @@ export default function PresentationDisplayPage() {
       )}
 
       {/* Lyrics Content Container */}
-      <div className="relative z-10 max-w-5xl mx-auto space-y-6">
+      <div className="relative z-10 w-full max-w-[95vw] mx-auto space-y-6 break-words whitespace-pre-wrap">
         {slide ? (
           <>
             <p

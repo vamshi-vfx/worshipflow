@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS song_lines (
   secondary_text TEXT,
   chords TEXT,
   language TEXT NOT NULL CHECK (language IN ('telugu', 'english', 'hindi', 'mixed', 'romanized')),
-  display_mode TEXT NOT NULL DEFAULT 'telugu' CHECK (display_mode IN ('telugu', 'english', 'transliteration', 'mixed', 'both')),
+  display_mode TEXT NOT NULL DEFAULT 'telugu' CHECK (display_mode IN ('telugu', 'english', 'hindi', 'transliteration', 'mixed', 'both')),
   created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS song_slides (
   primary_text TEXT NOT NULL,
   secondary_text TEXT,
   line_ids TEXT[] DEFAULT '{}',
-  display_mode TEXT NOT NULL DEFAULT 'telugu' CHECK (display_mode IN ('telugu', 'english', 'transliteration', 'mixed', 'both')),
+  display_mode TEXT NOT NULL DEFAULT 'telugu' CHECK (display_mode IN ('telugu', 'english', 'hindi', 'transliteration', 'mixed', 'both')),
   created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 

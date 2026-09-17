@@ -505,7 +505,11 @@ export function generateSlides(
 
 export function processRawLyrics(raw: string, mode: "one-line" | "two-line" | "smart-fit" = "smart-fit") {
   const normalized = normalizeText(raw);
-  const cleaned = cleanDuplicateLines(normalized);
+  // Do not de-duplicate adjacent lines here. Repeated lyric lines are often
+  // intentional (for example, a repeated chorus), and removing them makes the
+  // generated slides differ from the imported song. Normalization already
+  // removes only harmless surrounding whitespace.
+  const cleaned = normalized;
   const sections = detectSections(cleaned);
   const language = detectLanguage(cleaned);
   const slides = generateSlides(sections, mode);
