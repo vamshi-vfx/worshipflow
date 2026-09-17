@@ -53,7 +53,7 @@ export function useDisplaySync(isDisplayWindow: boolean, sessionId?: string) {
 
   const subscribe = useCallback((listener: (message: DisplayMessage) => void) => {
     listenersRef.current.add(listener);
-    return () => listenersRef.current.delete(listener);
+    return () => { listenersRef.current.delete(listener); };
   }, []);
 
   return { sendMessage, subscribe };
