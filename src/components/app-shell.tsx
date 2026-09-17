@@ -105,6 +105,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <CommandPalette />
 
             <Link
+              href="/remote"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs font-bold hover:bg-white/15 transition-all border border-white/10"
+              title="Open Remote Control"
+            >
+              <Radio className="w-3.5 h-3.5" />
+              <span>Remote</span>
+            </Link>
+
+            <Link
               href="/smart-import"
               className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-gold text-brand-darker text-xs font-bold hover:bg-brand-goldLight transition-all shadow-sm"
             >
