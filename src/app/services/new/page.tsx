@@ -53,6 +53,9 @@ function NewServicePageContent() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [hasRecoveryDraft, setHasRecoveryDraft] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templates, setTemplates] = useState<any[]>([]);
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The query string never changes after the first render. Keep the id created by
   // the first autosave so later autosaves update instead of inserting duplicates.
@@ -62,8 +65,14 @@ function NewServicePageContent() {
   useEffect(() => {
     if (!user) return;
     loadData();
+    try { setTemplates(JSON.parse(localStorage.getItem("worshipflow-service-templates") || "[]")); } catch { setTemplates([]); }
     if (serviceId) {
       loadService(serviceId);
+    } else {
+      const raw = localStorage.getItem("worshipflow-service-draft");
+      if (raw) {
+        try { const draft = JSON.parse(raw); if (draft.name || draft.items?.length) setHasRecoveryDraft(true); } catch { /* ignore malformed local recovery */ }
+      }
     }
   }, [user, serviceId]);
 
@@ -98,6 +107,34 @@ function NewServicePageContent() {
       console.error("Failed to load service", e);
       setError("Failed to load service");
     }
+  };
+
+  const recoverDraft = () => {
+    try {
+      const draft = JSON.parse(localStorage.getItem("worshipflow-service-draft") || "null");
+      if (!draft) return;
+      setName(draft.name || ""); setDate(draft.date || new Date().toISOString().split("T")[0]);
+      setDescription(draft.description || ""); setStatus(draft.status || "draft"); setItems(draft.items || []);
+      setHasRecoveryDraft(false); toast.addToast("success", "Recovered your unsaved service plan");
+    } catch { toast.addToast("error", "Could not recover the draft"); }
+  };
+
+  const discardDraft = () => { localStorage.removeItem("worshipflow-service-draft"); setHasRecoveryDraft(false); };
+
+  const saveTemplate = () => {
+    const label = templateName.trim() || name.trim();
+    if (!label) { toast.addToast("error", "Add a service name before saving a template"); return; }
+    const templates = JSON.parse(localStorage.getItem("worshipflow-service-templates") || "[]");
+    const next = templates.filter((t: any) => t.name !== label);
+    next.unshift({ name: label, description, items: items.map(({ id, song, announcement, ...item }) => item) });
+    const saved = next.slice(0, 12); localStorage.setItem("worshipflow-service-templates", JSON.stringify(saved));
+    setTemplates(saved); setTemplateName(""); toast.addToast("success", "Service template saved");
+  };
+
+  const applyTemplate = (template: any) => {
+    setDescription(template.description || description);
+    setItems((template.items || []).map((item: any, index: number) => ({ ...item, id: crypto.randomUUID(), order: index, song: item.songId ? songs.find(s => s.id === item.songId) : undefined, announcement: item.announcementId ? announcements.find(a => a.id === item.announcementId) : undefined })));
+    toast.addToast("success", `Applied ${template.name}`);
   };
 
   const addItem = () => {
@@ -173,6 +210,11 @@ function NewServicePageContent() {
   }, [user, name, date, description, status, items]);
 
   useEffect(() => {
+    if (!name && items.length === 0) return;
+    localStorage.setItem("worshipflow-service-draft", JSON.stringify({ name, date, description, status, items }));
+  }, [name, date, description, status, items]);
+
+  useEffect(() => {
     if (!name) return;
 
     if (autosaveTimeoutRef.current) {
@@ -216,6 +258,7 @@ function NewServicePageContent() {
     try {
       await persistServiceData();
       setSaveStatus("saved");
+      localStorage.removeItem("worshipflow-service-draft");
       router.push("/services");
     } catch (e) {
       console.error("Failed to save service", e);
@@ -267,12 +310,23 @@ function NewServicePageContent() {
         </div>
       )}
 
+      {hasRecoveryDraft && !isEditing && (
+        <div className="mx-8 mt-4 p-3 rounded-lg border border-brand-gold/30 bg-brand-gold/10 flex items-center justify-between text-sm">
+          <span className="text-brand-gold">An unsaved service plan was found on this device.</span>
+          <div className="flex gap-2"><button onClick={recoverDraft} className="px-3 py-1 rounded bg-brand-gold text-brand-darker font-medium">Recover</button><button onClick={discardDraft} className="px-3 py-1 rounded bg-white/10 text-white">Discard</button></div>
+        </div>
+      )}
       <div className="flex h-[calc(100vh-64px)]">
         {/* Left Panel */}
         <div className="w-96 border-r border-white/5 p-6 overflow-y-auto">
           <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-4">
             Service Details
           </h3>
+          <div className="mb-5 rounded-lg border border-white/10 bg-white/[.03] p-3 space-y-2">
+            <div className="text-xs font-semibold text-white">Templates</div>
+            <div className="flex gap-2"><input value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder="Template name" className="min-w-0 flex-1 px-2 py-1.5 bg-white/5 border border-white/10 rounded text-xs text-white" /><button onClick={saveTemplate} className="px-2 py-1.5 rounded bg-white/10 text-xs text-white">Save</button></div>
+            <select defaultValue="" onChange={e => { const t = JSON.parse(e.target.value || "null"); if (t) applyTemplate(t); e.currentTarget.value = ""; }} className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded text-xs text-white"><option value="">Apply saved template…</option>{templates.map((t: any) => <option key={t.name} value={JSON.stringify(t)}>{t.name}</option>)}</select>
+          </div>
           <div className="space-y-4 mb-8">
             <div>
               <label className="block text-xs text-muted-foreground mb-1.5">Service Name</label>
@@ -508,6 +562,9 @@ function NewServicePageContent() {
                         </span>
                       </div>
                     )}
+                  </div>
+                  <div className="w-48 hidden md:block">
+                    <input value={item.notes || ""} onChange={e => setItems(items.map(i => i.id === item.id ? { ...i, notes: e.target.value } : i))} placeholder="Operator note…" className="w-full px-2 py-1.5 bg-white/5 border border-white/10 rounded text-xs text-white placeholder:text-muted-foreground" />
                   </div>
                   <button
                     onClick={() => removeItem(item.id)}
