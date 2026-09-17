@@ -457,7 +457,7 @@ function PresentationConsole() {
             title="Open mobile remote and generate QR pairing"
           >
             <Wifi className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Mobile Remote</span>
+            <span>Remote</span>
           </Link>
 
           {/* Blackout Button */}
