@@ -26,6 +26,7 @@ import {
   Menu,
   X,
   Sparkles,
+  Radio,
 } from "lucide-react";
 
 const primaryNav = [
@@ -44,6 +45,7 @@ const secondaryNav = [
   { label: "Bulk Content Import", href: "/admin/import", icon: UploadCloud },
   { label: "Themes", href: "/themes", icon: Palette },
   { label: "Media Library", href: "/media", icon: Image },
+  { label: "Remote Control", href: "/remote", icon: Radio },
   { label: "Settings", href: "/settings", icon: Settings },
   { label: "Help & Shortcuts", href: "/help", icon: HelpCircle },
 ];
