@@ -148,8 +148,12 @@ export default function MediaPage() {
                   <div className="mt-3 flex items-center gap-2">
                     <button
                       onClick={() => {
+                        // Clear other presentation sources so this asset is not shadowed by a stale song/Bible.
+                        localStorage.removeItem("church-lyrics-current-song");
+                        localStorage.removeItem("church-lyrics-current-bible");
+                        localStorage.removeItem("church-lyrics-current-service");
                         localStorage.setItem("church-lyrics-current-media", JSON.stringify(item));
-                        router.push("/presentation");
+                        router.push("/presentation?media=1");
                       }}
                       className="p-2 rounded-lg bg-brand-gold/10 text-brand-gold hover:bg-brand-gold/20 transition-colors"
                     >
