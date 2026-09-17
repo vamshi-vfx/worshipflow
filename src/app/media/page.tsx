@@ -11,6 +11,7 @@ import {
   Film,
   Music2,
   Loader2,
+  Search,
 } from "lucide-react";
 import { useAuth } from "@/app/providers";
 import { db } from "@/services/database";
@@ -22,6 +23,12 @@ export default function MediaPage() {
   const [media, setMedia] = useState<Media[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "image" | "video" | "audio">("all");
+  const visibleMedia = media.filter((item) => {
+    const matchesQuery = item.name.toLowerCase().includes(query.trim().toLowerCase());
+    return matchesQuery && (typeFilter === "all" || item.type === typeFilter);
+  });
 
   useEffect(() => {
     if (!user) return;
@@ -85,6 +92,15 @@ export default function MediaPage() {
       </header>
 
       <div className="p-8">
+        <div className="mb-6 flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search media assets..." className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-gold/50" />
+          </div>
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)} className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand-gold/50">
+            <option value="all">All types</option><option value="image">Images</option><option value="video">Videos</option><option value="audio">Audio</option>
+          </select>
+        </div>
         {error && (
           <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">
             {error}
@@ -106,8 +122,11 @@ export default function MediaPage() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-4 gap-4">
-            {media.map((item) => (
+          visibleMedia.length === 0 ? (
+            <div className="glass rounded-xl p-10 text-center text-sm text-muted-foreground">No assets match this filter.</div>
+          ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {visibleMedia.map((item) => (
               <div
                 key={item.id}
                 className="glass rounded-xl overflow-hidden hover:bg-white/[0.07] transition-all duration-300 group"
@@ -147,7 +166,7 @@ export default function MediaPage() {
               </div>
             ))}
           </div>
-        )}
+          ))}
       </div>
     </div>
   );
