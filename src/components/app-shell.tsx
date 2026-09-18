@@ -67,7 +67,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   // Check if current route is a standalone full presentation window
   const isPresentationDisplayRoute = pathname === "/presentation/display";
-  if (isPresentationDisplayRoute) {
+  const isPhoneCameraRoute = pathname.startsWith("/live-camera/phone");
+  if (isPresentationDisplayRoute || isPhoneCameraRoute) {
     return <main className="min-h-screen bg-black">{children}</main>;
   }
 

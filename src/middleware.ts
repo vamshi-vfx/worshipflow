@@ -11,6 +11,7 @@ export async function middleware(request: NextRequest) {
     "/_next",
     "/favicon.ico",
     "/presentation/display",
+    "/live-camera/phone",
   ];
 
   const isPublicPath = publicPaths.some(
