@@ -13,7 +13,8 @@ export type DisplayMessage =
   | { type: "open-display" }
   | { type: "close-display" }
   | { type: "heartbeat"; timestamp: number }
-  | { type: "state"; state: any };
+  | { type: "state"; state: any }
+  | { type: "source-change"; source: "camera" | "lyrics" | "bible" | "media" | "blank"; cameraSession?: string };
 
 const CHANNEL_NAME = "church-lyrics-display";
 const safeSession = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);

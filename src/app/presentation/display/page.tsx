@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useDisplaySync, type DisplayMessage } from "@/hooks/use-display-sync";
 import type { Theme, DisplayMode } from "@/types";
+import { createClient } from "@/lib/supabase/client";
 
 function getVideoEmbedUrl(url?: string): string | null {
   if (!url) return null;
@@ -46,6 +47,9 @@ export default function PresentationDisplayPage() {
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
   const [languageMode, setLanguageMode] = useState<DisplayMode>("telugu");
   const [sessionId, setSessionId] = useState("");
+  const [source, setSource] = useState<"camera" | "lyrics" | "bible" | "media" | "blank">("lyrics");
+  const [cameraSession, setCameraSession] = useState("");
+  const cameraVideoRef = useRef<HTMLVideoElement>(null);
 
   // A display can be opened from the operator's pairing QR/link. The random
   // session id is the capability token; no song or service data is put in it.
@@ -55,6 +59,28 @@ export default function PresentationDisplayPage() {
   }, []);
 
   const { sendMessage, subscribe } = useDisplaySync(true, sessionId);
+
+  // When the Control Studio selects Camera, the display joins the same temporary
+  // camera session and receives the laptop's already-negotiated phone stream.
+  useEffect(() => {
+    if (source !== "camera" || !cameraSession) return;
+    const supabase = createClient();
+    const viewerId = `display-${Math.random().toString(36).slice(2)}`;
+    const channel = supabase.channel(`wf-camera:${cameraSession}`, { config: { broadcast: { self: false } } });
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+    const send = (payload: any) => channel.send({ type: "broadcast", event: "camera", payload });
+    pc.ontrack = (event) => { if (cameraVideoRef.current) cameraVideoRef.current.srcObject = event.streams[0]; };
+    pc.onicecandidate = (event) => { if (event.candidate) send({ kind: "display-candidate", to: "studio", from: viewerId, candidate: event.candidate }); };
+    channel.on("broadcast", { event: "camera" }, async ({ payload }: any) => {
+      try {
+        if (payload.to && payload.to !== viewerId) return;
+        if (payload.kind === "studio-offer") { await pc.setRemoteDescription(payload.offer); const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); send({ kind: "display-answer", to: "studio", from: viewerId, answer }); }
+        if (payload.kind === "studio-candidate") await pc.addIceCandidate(payload.candidate);
+      } catch { /* reconnect is handled by the studio status */ }
+    });
+    channel.subscribe((state: string) => { if (state === "SUBSCRIBED") send({ kind: "display-ready", to: "studio", from: viewerId }); });
+    return () => { pc.close(); channel.unsubscribe(); };
+  }, [source, cameraSession]);
 
   // The operator and projector must render the same persisted deck. Older
   // localStorage songs have no slides, so retain a line-based fallback.
@@ -95,6 +121,10 @@ export default function PresentationDisplayPage() {
         setIsBlackScreen(msg.enabled);
       } else if (msg.type === "blank-screen") {
         setIsBlankScreen(msg.enabled);
+      } else if (msg.type === "source-change") {
+        setSource(msg.source);
+        if (msg.cameraSession) setCameraSession(msg.cameraSession);
+        if (msg.source !== "camera" && cameraVideoRef.current) cameraVideoRef.current.srcObject = null;
       } else if (msg.type === "theme-change") {
         if (msg.theme) setTheme(msg.theme);
       } else if (msg.type === "language-change") {
@@ -234,8 +264,11 @@ export default function PresentationDisplayPage() {
         />
       )}
 
+      {source === "camera" && (
+        <video ref={cameraVideoRef} autoPlay playsInline className="absolute inset-0 z-10 h-full w-full object-contain bg-black" />
+      )}
       {/* Lyrics Content Container */}
-      <div className="relative z-10 w-full max-w-[95vw] mx-auto space-y-6 break-words whitespace-pre-wrap">
+      <div className={`relative z-10 w-full max-w-[95vw] mx-auto space-y-6 break-words whitespace-pre-wrap ${source === "camera" ? "hidden" : ""}`}>
         {slide ? (
           <>
             {slide.mediaUrl && slide.mediaType === "video" && getVideoEmbedUrl(slide.mediaUrl) ? <iframe src={getVideoEmbedUrl(slide.mediaUrl)!} title={slide.primaryText} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen className="h-[75vh] w-full rounded-xl" /> : slide.mediaUrl && slide.mediaType === "video" ? <video src={slide.mediaUrl} autoPlay loop controls playsInline className="max-h-[75vh] max-w-full rounded-xl object-contain" /> : slide.mediaUrl && slide.mediaType === "document" ? <iframe src={slide.mediaUrl} title={slide.primaryText} className="h-[75vh] w-full rounded-xl bg-white" /> : slide.mediaUrl ? <img src={slide.mediaUrl} alt={slide.primaryText} className="max-h-[75vh] max-w-full rounded-xl object-contain" /> : null}
