@@ -119,7 +119,14 @@ function PresentationConsole() {
   const [allSongs, setAllSongs] = useState<Song[]>([]);
   const [searchSongQuery, setSearchSongQuery] = useState("");
 
-  const { sendMessage, subscribe } = useDisplaySync(false);
+  const [remoteSession, setRemoteSession] = useState("");
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("worshipflow-remote-pairing") || "null");
+      if (saved?.code) setRemoteSession(String(saved.code));
+    } catch { /* ignore invalid pairing */ }
+  }, []);
+  const { sendMessage, subscribe } = useDisplaySync(false, remoteSession);
 
   // Listen for TV display window heartbeats
   useEffect(() => {
