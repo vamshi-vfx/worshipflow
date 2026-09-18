@@ -62,11 +62,20 @@ export default function PhoneCameraHost() {
   const send = (payload: any) => channelRef.current?.send({ type: "broadcast", event: "camera", payload });
   const startCamera = async (nextFacing = facing) => {
     try {
+      if (!navigator.mediaDevices?.getUserMedia) { setStatus("Open this link in Chrome and allow camera access"); return; }
       streamRef.current?.getTracks().forEach(t => t.stop());
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: nextFacing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true });
+      // Request video first so a microphone permission problem does not prevent the camera preview.
+      const videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: nextFacing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      let stream = videoStream;
+      try {
+        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+        audioStream.getAudioTracks().forEach(track => stream.addTrack(track));
+      } catch {
+        setStatus("Camera live — allow microphone for audio");
+      }
       streamRef.current = stream; if (videoRef.current) videoRef.current.srcObject = stream;
-      setRunning(true); setPaused(false); setStatus("Camera live — laptop controls enabled"); send({ kind: "phone-live", from: "phone" });
-    } catch { setStatus("Camera/microphone permission required"); send({ kind: "permission-required", from: "phone" }); }
+      setRunning(true); setPaused(false); setStatus(stream.getAudioTracks().length ? "Camera live — laptop controls enabled" : "Camera live — microphone permission needed for audio"); send({ kind: "phone-live", from: "phone" });
+    } catch (error: any) { setStatus(error?.name === "NotAllowedError" ? "Allow camera in Chrome site permissions, then tap Start again" : "Camera unavailable — close other camera apps and retry"); send({ kind: "permission-required", from: "phone" }); }
   };
   const stopCamera = () => { streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null; if (videoRef.current) videoRef.current.srcObject = null; setRunning(false); setPaused(false); setStatus("Camera stopped"); send({ kind: "phone-stopped", from: "phone" }); };
 
