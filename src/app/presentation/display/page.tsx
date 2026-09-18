@@ -90,7 +90,9 @@ export default function PresentationDisplayPage() {
             const allSlides = getSongSlides(currentSong);
 
             if (allSlides[msg.index]) {
-              setSlide(allSlides[msg.index]);
+              const nextSlide = allSlides[msg.index];
+              setSlide(nextSlide);
+              sendMessage({ type: "state", state: { index: msg.index, total: allSlides.length, slide: nextSlide } });
             }
           } catch (e) {
             console.error("Display slide parse error", e);
@@ -126,7 +128,9 @@ export default function PresentationDisplayPage() {
             }
 
             if (bibleSlides[msg.index]) {
-              setSlide(bibleSlides[msg.index]);
+              const nextSlide = bibleSlides[msg.index];
+              setSlide(nextSlide);
+              sendMessage({ type: "state", state: { index: msg.index, total: bibleSlides.length, slide: nextSlide } });
             }
           } catch (e) {
             console.error("Display bible parse error", e);
