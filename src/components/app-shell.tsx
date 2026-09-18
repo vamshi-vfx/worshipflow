@@ -27,6 +27,7 @@ import {
   X,
   Sparkles,
   Radio,
+  Camera,
 } from "lucide-react";
 
 const primaryNav = [
@@ -47,6 +48,7 @@ const secondaryNav = [
   { label: "Themes", href: "/themes", icon: Palette },
   { label: "Media Library", href: "/media", icon: Image },
   { label: "Remote Control", href: "/remote", icon: Radio },
+  { label: "Live Camera", href: "/live-camera", icon: Camera },
   { label: "Settings", href: "/settings", icon: Settings },
   { label: "Help & Shortcuts", href: "/help", icon: HelpCircle },
 ];
