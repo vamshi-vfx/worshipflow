@@ -50,7 +50,7 @@ export default function PresentationDisplayPage() {
   const cameraVideoRef = useRef<HTMLVideoElement>(null);
   const cameraPcRef = useRef<RTCPeerConnection | null>(null);
   const cameraChannelRef = useRef<any>(null);
-  const cameraViewerId = useRef(crypto.randomUUID());
+  const cameraViewerId = useRef(`display-${Math.random().toString(36).slice(2)}`);
 
   // A display can be opened from the operator's pairing QR/link. The random
   // session id is the capability token; no song or service data is put in it.

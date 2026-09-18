@@ -12,7 +12,7 @@ type Source = "camera" | "lyrics" | "bible" | "media" | "blank";
 export default function CameraStudio() {
   const [session, setSession] = useState(""); const [status, setStatus] = useState("Create a camera session");
   const [source, setSource] = useState<Source>("camera"); const [muted, setMuted] = useState(false); const [paused, setPaused] = useState(false); const [recording, setRecording] = useState(false); const [phoneReady, setPhoneReady] = useState(false);
-  const remoteVideo = useRef<HTMLVideoElement>(null); const pcRef = useRef<RTCPeerConnection | null>(null); const channelRef = useRef<any>(null); const recorderRef = useRef<MediaRecorder | null>(null); const chunksRef = useRef<Blob[]>([]); const viewerId = useRef(crypto.randomUUID());
+  const remoteVideo = useRef<HTMLVideoElement>(null); const pcRef = useRef<RTCPeerConnection | null>(null); const channelRef = useRef<any>(null); const recorderRef = useRef<MediaRecorder | null>(null); const chunksRef = useRef<Blob[]>([]); const viewerId = useRef(`viewer-${Math.random().toString(36).slice(2)}`);
   const { sendMessage } = useDisplaySync(false, session);
   const phoneUrl = useMemo(() => typeof window !== "undefined" && session ? `${window.location.origin}/live-camera/phone?session=${encodeURIComponent(session)}` : "", [session]);
   const qrUrl = phoneUrl ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=8&data=${encodeURIComponent(phoneUrl)}` : "";
