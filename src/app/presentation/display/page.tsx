@@ -218,7 +218,7 @@ export default function PresentationDisplayPage() {
       <div className="relative z-10 w-full max-w-[95vw] mx-auto space-y-6 break-words whitespace-pre-wrap">
         {slide ? (
           <>
-            {slide.mediaUrl && slide.mediaType === "video" ? <video src={slide.mediaUrl} autoPlay loop muted controls className="max-h-[75vh] max-w-full rounded-xl object-contain" /> : slide.mediaUrl ? <img src={slide.mediaUrl} alt={slide.primaryText} className="max-h-[75vh] max-w-full rounded-xl object-contain" /> : null}
+            {slide.mediaUrl && slide.mediaType === "video" ? <video src={slide.mediaUrl} autoPlay loop muted controls className="max-h-[75vh] max-w-full rounded-xl object-contain" /> : slide.mediaUrl && slide.mediaType === "document" ? <iframe src={slide.mediaUrl} title={slide.primaryText} className="h-[75vh] w-full rounded-xl bg-white" /> : slide.mediaUrl ? <img src={slide.mediaUrl} alt={slide.primaryText} className="max-h-[75vh] max-w-full rounded-xl object-contain" /> : null}
             <p
               className="font-bold text-white leading-relaxed text-balance transition-all duration-200"
               style={{

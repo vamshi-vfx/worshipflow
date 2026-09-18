@@ -24,7 +24,7 @@ export default function MediaPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "image" | "video" | "audio">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "image" | "video" | "audio" | "document">("all");
   const visibleMedia = media.filter((item) => {
     const matchesQuery = item.name.toLowerCase().includes(query.trim().toLowerCase());
     return matchesQuery && (typeFilter === "all" || item.type === typeFilter);
@@ -98,7 +98,7 @@ export default function MediaPage() {
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search media assets..." className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-gold/50" />
           </div>
           <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)} className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand-gold/50">
-            <option value="all">All types</option><option value="image">Images</option><option value="video">Videos</option><option value="audio">Audio</option>
+            <option value="all">All types</option><option value="image">Images</option><option value="video">Videos</option><option value="audio">Audio</option><option value="document">Documents</option>
           </select>
         </div>
         {error && (

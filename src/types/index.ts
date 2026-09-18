@@ -158,7 +158,7 @@ export interface Announcement {
 export interface Media {
   id: string;
   name: string;
-  type: "image" | "video" | "audio";
+  type: "image" | "video" | "audio" | "document";
   url: string;
   thumbnailUrl?: string;
   size?: number;

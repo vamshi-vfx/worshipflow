@@ -13,13 +13,14 @@ export default function MediaUploadPage() {
   const toast = useToast();
 
   const [name, setName] = useState("");
-  const [type, setType] = useState<"image" | "video" | "audio">("image");
+  const [type, setType] = useState<"image" | "video" | "audio" | "document">("image");
   const [url, setUrl] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
-    if (!name.trim() || !url.trim()) {
-      toast.addToast("error", "Please fill in all fields");
+    if (!name.trim() || (!url.trim() && !selectedFile)) {
+      toast.addToast("error", "Add a URL or choose a file before saving");
       return;
     }
 
@@ -30,11 +31,22 @@ export default function MediaUploadPage() {
 
     setIsSaving(true);
     try {
+      let sourceUrl = url.trim();
+      if (selectedFile) {
+        if (selectedFile.size > 25 * 1024 * 1024) throw new Error("Direct files must be 25MB or smaller");
+        sourceUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(new Error("Could not read selected file"));
+          reader.readAsDataURL(selectedFile);
+        });
+      }
       await db.createMedia(
         {
           name,
           type,
-          url,
+          url: sourceUrl,
+          size: selectedFile?.size,
         },
         user.id
       );
@@ -87,17 +99,24 @@ export default function MediaUploadPage() {
             <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase">Media Type</label>
             <select
               value={type}
-              onChange={(e) => setType(e.target.value as "image" | "video" | "audio")}
+              onChange={(e) => setType(e.target.value as "image" | "video" | "audio" | "document")}
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand-gold/50"
             >
               <option value="image">Image (JPEG, PNG, WebP)</option>
               <option value="video">Motion Video Loop (MP4, WebM)</option>
               <option value="audio">Audio / Instrumental Track (MP3, WAV)</option>
+              <option value="document">Document / PDF</option>
             </select>
           </div>
 
+          <div className="rounded-xl border border-dashed border-brand-gold/40 bg-brand-gold/5 p-4">
+            <label className="block text-xs font-semibold text-brand-gold mb-2 uppercase">Direct file import (up to 25MB)</label>
+            <input type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.ppt,.pptx" onChange={(e) => { const file = e.target.files?.[0] || null; setSelectedFile(file); if (file) { setName((current) => current || file.name.replace(/\\.[^.]+$/, "")); setType(file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : file.type.startsWith("audio/") ? "audio" : "document"); } }} className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-brand-gold file:px-3 file:py-2 file:text-xs file:font-semibold file:text-brand-darker" />
+            {selectedFile && <p className="text-xs text-white/70 mt-2">Selected: {selectedFile.name}</p>}
+          </div>
+
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase">Direct Media URL</label>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1.5 uppercase">Direct Media URL (optional)</label>
             <input
               type="text"
               placeholder="https://images.unsplash.com/... or cloud storage URL"

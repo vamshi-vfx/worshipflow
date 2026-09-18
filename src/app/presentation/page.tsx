@@ -546,7 +546,7 @@ function PresentationConsole() {
               </div>
             ) : currentSlide ? (
               <div className="space-y-4">
-                {currentSlide.mediaUrl && currentSlide.mediaType === "video" ? <video src={currentSlide.mediaUrl} autoPlay loop muted controls className="max-h-[55vh] w-full rounded-xl object-contain" /> : currentSlide.mediaUrl ? <img src={currentSlide.mediaUrl} alt={currentSlide.primaryText} className="max-h-[55vh] w-full rounded-xl object-contain" /> : null}
+                {currentSlide.mediaUrl && currentSlide.mediaType === "video" ? <video src={currentSlide.mediaUrl} autoPlay loop muted controls className="max-h-[55vh] w-full rounded-xl object-contain" /> : currentSlide.mediaUrl && currentSlide.mediaType === "document" ? <iframe src={currentSlide.mediaUrl} title={currentSlide.primaryText} className="h-[55vh] w-full rounded-xl bg-white" /> : currentSlide.mediaUrl ? <img src={currentSlide.mediaUrl} alt={currentSlide.primaryText} className="max-h-[55vh] w-full rounded-xl object-contain" /> : null}
                 {!currentSlide.mediaUrl && <p className="text-2xl sm:text-3xl font-extrabold text-white leading-relaxed text-balance">{currentSlide.primaryText}</p>}
                 {currentSlide.secondaryText && (
                   <p className="text-base sm:text-lg text-brand-gold italic text-balance font-medium">
