@@ -12,7 +12,7 @@ type Source = "camera" | "lyrics" | "bible" | "media" | "blank";
 export default function CameraStudio() {
   const [session, setSession] = useState(""); const [displaySession, setDisplaySession] = useState(""); const [status, setStatus] = useState("Create a camera session");
   const [source, setSource] = useState<Source>("camera"); const [facing, setFacing] = useState<"user" | "environment">("environment"); const [muted, setMuted] = useState(false); const [paused, setPaused] = useState(false); const [recording, setRecording] = useState(false); const [phoneReady, setPhoneReady] = useState(false);
-  const remoteVideo = useRef<HTMLVideoElement>(null); const remoteStreamRef = useRef<MediaStream | null>(null); const displayPeersRef = useRef<Map<string, RTCPeerConnection>>(new Map()); const pcRef = useRef<RTCPeerConnection | null>(null); const channelRef = useRef<any>(null); const recorderRef = useRef<MediaRecorder | null>(null); const chunksRef = useRef<Blob[]>([]); const viewerId = useRef(`viewer-${Math.random().toString(36).slice(2)}`);
+  const remoteVideo = useRef<HTMLVideoElement>(null); const remoteStreamRef = useRef<MediaStream | null>(null); const displayPeersRef = useRef<Map<string, RTCPeerConnection>>(new Map()); const pcRef = useRef<RTCPeerConnection | null>(null); const channelRef = useRef<any>(null); const recorderRef = useRef<MediaRecorder | null>(null); const chunksRef = useRef<Blob[]>([]); const viewerId = useRef(`studio-${Math.random().toString(36).slice(2, 10)}`); const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
   useEffect(() => { try { const saved = JSON.parse(localStorage.getItem("worshipflow-remote-pairing") || "null"); if (saved?.code) setDisplaySession(String(saved.code)); } catch { /* ignore */ } }, []);
   const { sendMessage } = useDisplaySync(false, displaySession || session);
   const phoneUrl = useMemo(() => typeof window !== "undefined" && session ? `${window.location.origin}/live-camera/phone?session=${encodeURIComponent(session)}` : "", [session]);
@@ -29,6 +29,7 @@ export default function CameraStudio() {
       displayPeersRef.current.forEach(async (displayPc, id) => { event.streams[0].getTracks().forEach((track) => displayPc.addTrack(track, event.streams[0])); const offer = await displayPc.createOffer(); await displayPc.setLocalDescription(offer); send({ kind: "studio-offer", to: id, from: "studio", offer }); });
     };
     pc.onicecandidate = (e) => e.candidate && send({ kind: "candidate", to: "phone", from: viewerId.current, candidate: e.candidate });
+    pc.onconnectionstatechange = () => { if (["failed", "disconnected"].includes(pc.connectionState)) { setStatus("Phone disconnected — waiting for reconnect…"); send({ kind: "viewer-ready", to: "phone", from: viewerId.current }); } };
     pc.onconnectionstatechange = () => { if (["failed", "disconnected"].includes(pc.connectionState)) setStatus("Disconnected — reconnecting…"); if (pc.connectionState === "connected") setStatus("Phone camera live"); };
     channel.on("broadcast", { event: "camera" }, async ({ payload }: any) => {
       try {
@@ -47,9 +48,9 @@ export default function CameraStudio() {
         if (payload.to && payload.to !== viewerId.current) return;
         if (payload.kind === "phone-ready") { setPhoneReady(true); setStatus("Phone connected — start camera"); }
         if (payload.kind === "permission-required") setStatus("Phone permission required");
-        if (payload.kind === "phone-live") { setPhoneReady(true); setStatus("Phone live — connecting preview…"); send({ kind: "viewer-ready", from: viewerId.current }); }
-        if (payload.kind === "offer") { await pc.setRemoteDescription(payload.offer); const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); send({ kind: "answer", to: "phone", from: viewerId.current, answer }); }
-        if (payload.kind === "candidate") await pc.addIceCandidate(payload.candidate);
+        if (payload.kind === "phone-live") { setPhoneReady(true); setStatus("Phone live — connecting preview…"); send({ kind: "viewer-ready", to: payload.from, from: viewerId.current, role: "studio" }); }
+        if (payload.kind === "offer" && payload.from) { await pc.setRemoteDescription(payload.offer); const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); send({ kind: "answer", to: payload.from, from: viewerId.current, answer: pc.localDescription }); for (const candidate of pendingCandidates.current.splice(0)) await pc.addIceCandidate(candidate); }
+        if (payload.kind === "candidate" && payload.from) { if (pc.remoteDescription) await pc.addIceCandidate(payload.candidate); else pendingCandidates.current.push(payload.candidate); }
         if (payload.kind === "phone-stopped") { setStatus("Phone camera stopped"); setPhoneReady(false); }
       } catch { setStatus("Signaling error — reconnect"); }
     });
