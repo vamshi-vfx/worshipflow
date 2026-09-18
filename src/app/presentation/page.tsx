@@ -38,6 +38,26 @@ import { useDisplaySync } from "@/hooks/use-display-sync";
 import { useToast } from "@/components/toast";
 import type { Song, Service, Theme, DisplayMode, LyricLine } from "@/types";
 
+function getVideoEmbedUrl(url?: string): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("youtube.com")) {
+      const id = parsed.searchParams.get("v") || parsed.pathname.split("/").filter(Boolean).pop();
+      return id ? `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&enablejsapi=1` : null;
+    }
+    if (parsed.hostname === "youtu.be") {
+      const id = parsed.pathname.split("/").filter(Boolean)[0];
+      return id ? `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&enablejsapi=1` : null;
+    }
+    if (parsed.hostname.includes("vimeo.com")) {
+      const id = parsed.pathname.split("/").filter(Boolean).pop();
+      return id ? `https://player.vimeo.com/video/${id}?autoplay=1` : null;
+    }
+  } catch { /* direct media URL */ }
+  return null;
+}
+
 const THEMES: Theme[] = [
   {
     id: "cinematic-dark",
@@ -546,7 +566,7 @@ function PresentationConsole() {
               </div>
             ) : currentSlide ? (
               <div className="space-y-4">
-                {currentSlide.mediaUrl && currentSlide.mediaType === "video" ? <video src={currentSlide.mediaUrl} autoPlay loop muted controls className="max-h-[55vh] w-full rounded-xl object-contain" /> : currentSlide.mediaUrl && currentSlide.mediaType === "document" ? <iframe src={currentSlide.mediaUrl} title={currentSlide.primaryText} className="h-[55vh] w-full rounded-xl bg-white" /> : currentSlide.mediaUrl ? <img src={currentSlide.mediaUrl} alt={currentSlide.primaryText} className="max-h-[55vh] w-full rounded-xl object-contain" /> : null}
+                {currentSlide.mediaUrl && currentSlide.mediaType === "video" && getVideoEmbedUrl(currentSlide.mediaUrl) ? <iframe src={getVideoEmbedUrl(currentSlide.mediaUrl)!} title={currentSlide.primaryText} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen className="h-[55vh] w-full rounded-xl" /> : currentSlide.mediaUrl && currentSlide.mediaType === "video" ? <video src={currentSlide.mediaUrl} autoPlay loop controls playsInline className="max-h-[55vh] w-full rounded-xl object-contain" /> : currentSlide.mediaUrl && currentSlide.mediaType === "document" ? <iframe src={currentSlide.mediaUrl} title={currentSlide.primaryText} className="h-[55vh] w-full rounded-xl bg-white" /> : currentSlide.mediaUrl ? <img src={currentSlide.mediaUrl} alt={currentSlide.primaryText} className="max-h-[55vh] w-full rounded-xl object-contain" /> : null}
                 {!currentSlide.mediaUrl && <p className="text-2xl sm:text-3xl font-extrabold text-white leading-relaxed text-balance">{currentSlide.primaryText}</p>}
                 {currentSlide.secondaryText && (
                   <p className="text-base sm:text-lg text-brand-gold italic text-balance font-medium">

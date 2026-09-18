@@ -4,6 +4,26 @@ import { useState, useEffect } from "react";
 import { useDisplaySync, type DisplayMessage } from "@/hooks/use-display-sync";
 import type { Theme, DisplayMode } from "@/types";
 
+function getVideoEmbedUrl(url?: string): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("youtube.com")) {
+      const id = parsed.searchParams.get("v") || parsed.pathname.split("/").filter(Boolean).pop();
+      return id ? `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&enablejsapi=1` : null;
+    }
+    if (parsed.hostname === "youtu.be") {
+      const id = parsed.pathname.split("/").filter(Boolean)[0];
+      return id ? `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&enablejsapi=1` : null;
+    }
+    if (parsed.hostname.includes("vimeo.com")) {
+      const id = parsed.pathname.split("/").filter(Boolean).pop();
+      return id ? `https://player.vimeo.com/video/${id}?autoplay=1` : null;
+    }
+  } catch { /* direct media URL */ }
+  return null;
+}
+
 const DEFAULT_THEME: Theme = {
   id: "cinematic-dark",
   name: "Cinematic Dark",
@@ -218,7 +238,7 @@ export default function PresentationDisplayPage() {
       <div className="relative z-10 w-full max-w-[95vw] mx-auto space-y-6 break-words whitespace-pre-wrap">
         {slide ? (
           <>
-            {slide.mediaUrl && slide.mediaType === "video" ? <video src={slide.mediaUrl} autoPlay loop muted controls className="max-h-[75vh] max-w-full rounded-xl object-contain" /> : slide.mediaUrl && slide.mediaType === "document" ? <iframe src={slide.mediaUrl} title={slide.primaryText} className="h-[75vh] w-full rounded-xl bg-white" /> : slide.mediaUrl ? <img src={slide.mediaUrl} alt={slide.primaryText} className="max-h-[75vh] max-w-full rounded-xl object-contain" /> : null}
+            {slide.mediaUrl && slide.mediaType === "video" && getVideoEmbedUrl(slide.mediaUrl) ? <iframe src={getVideoEmbedUrl(slide.mediaUrl)!} title={slide.primaryText} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen className="h-[75vh] w-full rounded-xl" /> : slide.mediaUrl && slide.mediaType === "video" ? <video src={slide.mediaUrl} autoPlay loop controls playsInline className="max-h-[75vh] max-w-full rounded-xl object-contain" /> : slide.mediaUrl && slide.mediaType === "document" ? <iframe src={slide.mediaUrl} title={slide.primaryText} className="h-[75vh] w-full rounded-xl bg-white" /> : slide.mediaUrl ? <img src={slide.mediaUrl} alt={slide.primaryText} className="max-h-[75vh] max-w-full rounded-xl object-contain" /> : null}
             <p
               className="font-bold text-white leading-relaxed text-balance transition-all duration-200"
               style={{
