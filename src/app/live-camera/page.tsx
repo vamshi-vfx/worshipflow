@@ -38,7 +38,12 @@ export default function LiveCameraPage() {
     const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
     pcRef.current = pc;
     pc.onicecandidate = (event) => { if (event.candidate) send({ kind: "candidate", candidate: event.candidate }); };
-    pc.onconnectionstatechange = () => setStatus(pc.connectionState === "connected" ? "Live connected" : pc.connectionState);
+    let readyTimer: ReturnType<typeof setInterval> | null = null;
+    pc.onconnectionstatechange = () => {
+      const state = pc.connectionState;
+      setStatus(state === "connected" ? "Live connected" : state === "failed" ? "Connection failed — retrying" : state);
+      if (state === "connected" && readyTimer) { clearInterval(readyTimer); readyTimer = null; }
+    };
     pc.ontrack = (event) => { if (remoteVideo.current) remoteVideo.current.srcObject = event.streams[0]; };
 
     channel.on("broadcast", { event: "signal" }, async ({ payload }: any) => {
@@ -59,7 +64,10 @@ export default function LiveCameraPage() {
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
       setStatus("Waiting for TV/display");
     } else {
-      setStatus("Connecting to camera"); send({ kind: "viewer-ready" });
+      setStatus("Connecting to camera");
+      // Broadcast repeatedly so the phone can join even if the viewer opened first.
+      send({ kind: "viewer-ready" });
+      readyTimer = setInterval(() => send({ kind: "viewer-ready" }), 2000);
     }
   };
 
