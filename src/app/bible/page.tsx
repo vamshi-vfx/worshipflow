@@ -53,6 +53,7 @@ export default function BiblePage() {
 
   // Data State
   const [customVerses, setCustomVerses] = useState<BibleVerse[]>([]);
+  const [databaseVerses, setDatabaseVerses] = useState<BibleVerse[]>([]);
   const [savedPresentations, setSavedPresentations] = useState<BiblePresentation[]>([]);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importText, setImportText] = useState("");
@@ -76,6 +77,37 @@ export default function BiblePage() {
     }
   };
 
+  // Load the complete imported translation for the selected book/chapter.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const translations = await db.getBibleTranslations();
+        const translation = translations.find((t: any) => t.code === "telugu-aruljohn") || translations.find((t: any) => t.language === "telugu");
+        if (!translation) return;
+        const books = await db.getBibleBooks(translation.id);
+        const book = books.find((b: any) => b.book_number === selectedBook.id);
+        if (!book) return;
+        const chapters = await db.getBibleChapters(book.id);
+        const chapter = chapters.find((c: any) => c.chapter_number === selectedChapter);
+        if (!chapter) return;
+        const verses = await db.getBibleVerses(chapter.id);
+        if (!active) return;
+        setDatabaseVerses(verses.map((v: any) => ({
+          bookEn: selectedBook.nameEn,
+          bookTe: selectedBook.nameTe,
+          chapter: selectedChapter,
+          verse: v.verse_number,
+          textTe: v.text,
+          textEn: "",
+        })));
+      } catch (e) {
+        console.error("Failed to load complete Bible chapter", e);
+      }
+    })();
+    return () => { active = false; };
+  }, [selectedBook, selectedChapter]);
+
   // Filtered Books List
   const filteredBooks = useMemo(() => {
     return ALL_BIBLE_BOOKS.filter((b) => {
@@ -92,7 +124,7 @@ export default function BiblePage() {
 
   // Current Chapter Verses
   const currentChapterVerses = useMemo(() => {
-    const all = [...CORE_TELUGU_SCRIPTURES, ...customVerses];
+    const all = [...CORE_TELUGU_SCRIPTURES, ...customVerses, ...databaseVerses];
     return all.filter(
       (v) =>
         (v.bookEn.toLowerCase() === selectedBook.nameEn.toLowerCase() ||
