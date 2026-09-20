@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -61,6 +61,16 @@ export default function BiblePage() {
   const [activeTab, setActiveTab] = useState<"browse" | "saved" | "search">("browse");
   const [databaseSearchResults, setDatabaseSearchResults] = useState<BibleVerse[]>([]);
   const [isSearchingDatabase, setIsSearchingDatabase] = useState(false);
+  const [isLoadingChapter, setIsLoadingChapter] = useState(false);
+
+  // Keep metadata and chapter requests shared across renders. Desktop users often
+  // change book/chapter quickly; a module-local cache prevents a request waterfall
+  // and avoids duplicate Supabase calls when effects/search rerun.
+  const bibleMetaCache = useRef<{ translations: any[]; booksByTranslation: Map<string, any[]>; chaptersByBook: Map<string, any[]> }>({
+    translations: [], booksByTranslation: new Map(), chaptersByBook: new Map(),
+  });
+  const chapterCache = useRef(new Map<string, BibleVerse[]>());
+  const chapterRequest = useRef(0);
 
   useEffect(() => {
     if (user) {
@@ -79,53 +89,82 @@ export default function BiblePage() {
     }
   };
 
-  // Load the complete imported translation for the selected book/chapter.
+  // Load only the selected chapter. Metadata is cached and the three dependent
+  // Supabase reads are never repeated for the same book/chapter in this session.
   useEffect(() => {
     let active = true;
-    (async () => {
-      try {
-        const translations = await db.getBibleTranslations();
-        const translation = translations.find((t: any) => t.code === "telugu-aruljohn") || translations.find((t: any) => t.language === "telugu");
-        if (!translation) return;
-        const books = await db.getBibleBooks(translation.id);
-        const book = books.find((b: any) => b.book_number === selectedBook.id);
-        if (!book) return;
-        const chapters = await db.getBibleChapters(book.id);
-        const chapter = chapters.find((c: any) => c.chapter_number === selectedChapter);
-        if (!chapter) return;
-        const verses = await db.getBibleVerses(chapter.id);
-        if (!active) return;
-        if (verses.length > 0) {
-          setDatabaseVerses(verses.map((v: any) => ({
-            bookEn: selectedBook.nameEn,
-            bookTe: selectedBook.nameTe,
-            chapter: selectedChapter,
-            verse: v.verse_number,
-            textTe: v.text,
-            textEn: "",
-          })));
-          return;
-        }
-        // Runtime fallback keeps presentation usable if a deployment is pointed at a
-        // read-only/older Supabase project while the licensed upstream data is available.
-        const fileName = selectedBook.nameEn === "Song of Solomon" ? "Song%20of%20Songs" : encodeURIComponent(selectedBook.nameEn);
-        const response = await fetch(`https://raw.githubusercontent.com/aruljohn/Bible-telugu/main/${fileName}.json`);
-        if (!response.ok) return;
-        const source = await response.json();
-        const chapterData = source.chapters?.find((c: any) => Number(c.chapter) === selectedChapter);
-        if (!active || !chapterData) return;
-        setDatabaseVerses(chapterData.verses.map((v: any) => ({
-          bookEn: selectedBook.nameEn,
-          bookTe: selectedBook.nameTe,
-          chapter: selectedChapter,
-          verse: Number(v.verse),
-          textTe: v.text,
-          textEn: "",
-        })));
-      } catch (e) {
-        console.error("Failed to load complete Bible chapter", e);
+    const requestId = ++chapterRequest.current;
+    const load = async () => {
+      setIsLoadingChapter(true);
+      setDatabaseVerses([]);
+      const cacheKey = `${selectedBook.id}:${selectedChapter}`;
+      const cached = chapterCache.current.get(cacheKey);
+      if (cached) {
+        setDatabaseVerses(cached);
+        setIsLoadingChapter(false);
+        return;
       }
-    })();
+      try {
+        const meta = bibleMetaCache.current;
+        if (!meta.translations.length) meta.translations = await db.getBibleTranslations();
+        const translation = meta.translations.find((t: any) => t.code === "telugu-aruljohn")
+          || meta.translations.find((t: any) => t.language === "telugu") || meta.translations[0];
+        let verses: BibleVerse[] = [];
+        if (translation) {
+          let books = meta.booksByTranslation.get(translation.id);
+          if (!books) {
+            books = await db.getBibleBooks(translation.id);
+            meta.booksByTranslation.set(translation.id, books);
+          }
+          const book = books.find((b: any) => Number(b.book_number) === selectedBook.id);
+          if (book) {
+            let chapters = meta.chaptersByBook.get(book.id);
+            if (!chapters) {
+              chapters = await db.getBibleChapters(book.id);
+              meta.chaptersByBook.set(book.id, chapters);
+            }
+            const chapter = chapters.find((c: any) => Number(c.chapter_number) === selectedChapter);
+            if (chapter) {
+              const rows = await db.getBibleVerses(chapter.id);
+              verses = rows.map((v: any) => ({ bookEn: selectedBook.nameEn, bookTe: selectedBook.nameTe,
+                chapter: selectedChapter, verse: Number(v.verse_number), textTe: v.text || "", textEn: "" }));
+            }
+          }
+        }
+        // The public file is a fallback for older/read-only projects, not a second
+        // request after a successful DB chapter. Try jsDelivr first for faster CDN delivery.
+        if (!verses.length) {
+          const fileName = selectedBook.nameEn === "Song of Solomon" ? "Song%20of%20Songs" : encodeURIComponent(selectedBook.nameEn);
+          const urls = [
+            `https://cdn.jsdelivr.net/gh/aruljohn/Bible-telugu@main/${fileName}.json`,
+            `https://raw.githubusercontent.com/aruljohn/Bible-telugu/main/${fileName}.json`,
+          ];
+          for (const url of urls) {
+            try {
+              const response = await fetch(url, { cache: "force-cache" });
+              if (!response.ok) continue;
+              const source = await response.json();
+              const chapterData = source.chapters?.find((c: any) => Number(c.chapter) === selectedChapter);
+              if (chapterData?.verses?.length) {
+                verses = chapterData.verses.map((v: any) => ({ bookEn: selectedBook.nameEn, bookTe: selectedBook.nameTe,
+                  chapter: selectedChapter, verse: Number(v.verse), textTe: v.text || "", textEn: "" }));
+                break;
+              }
+            } catch { /* try the second CDN */ }
+          }
+        }
+        if (!active || requestId !== chapterRequest.current) return;
+        if (verses.length) {
+          chapterCache.current.set(cacheKey, verses);
+          setDatabaseVerses(verses);
+        }
+      } catch (e) {
+        console.error("Failed to load Bible chapter", e);
+      } finally {
+        if (active && requestId === chapterRequest.current) setIsLoadingChapter(false);
+      }
+    };
+    void load();
     return () => { active = false; };
   }, [selectedBook, selectedChapter]);
 
@@ -146,12 +185,12 @@ export default function BiblePage() {
   // Current Chapter Verses
   const currentChapterVerses = useMemo(() => {
     const all = [...CORE_TELUGU_SCRIPTURES, ...customVerses, ...databaseVerses];
-    return all.filter(
-      (v) =>
-        (v.bookEn.toLowerCase() === selectedBook.nameEn.toLowerCase() ||
-          v.bookTe.includes(selectedBook.nameTe)) &&
-        v.chapter === selectedChapter
-    ).sort((a, b) => a.verse - b.verse);
+    const byVerse = new Map<number, BibleVerse>();
+    all.filter((v) =>
+      (v.bookEn.toLowerCase() === selectedBook.nameEn.toLowerCase() || v.bookTe.includes(selectedBook.nameTe)) &&
+      v.chapter === selectedChapter
+    ).forEach((verse) => byVerse.set(verse.verse, verse));
+    return [...byVerse.values()].sort((a, b) => a.verse - b.verse);
   }, [selectedBook, selectedChapter, customVerses, databaseVerses]);
 
   // Global Search Results. Keep the curated/offline index instant, then augment it
@@ -643,7 +682,12 @@ export default function BiblePage() {
 
                 {/* Verses List */}
                 <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-                  {currentChapterVerses.length === 0 ? (
+                  {isLoadingChapter && currentChapterVerses.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground bg-white/[0.02] rounded-xl border border-white/5">
+                      <RefreshCw className="w-6 h-6 mx-auto mb-2 text-brand-gold animate-spin" />
+                      <p className="text-sm text-white font-medium">Loading {selectedBook.nameEn} {selectedChapter}…</p>
+                    </div>
+                  ) : currentChapterVerses.length === 0 ? (
                     <div className="p-8 text-center text-muted-foreground bg-white/[0.02] rounded-xl border border-white/5 space-y-2">
                       <BookOpen className="w-8 h-8 mx-auto text-brand-gold opacity-50" />
                       <p className="text-sm text-white font-medium">
