@@ -93,11 +93,30 @@ export default function BiblePage() {
         if (!chapter) return;
         const verses = await db.getBibleVerses(chapter.id);
         if (!active) return;
-        setDatabaseVerses(verses.map((v: any) => ({
+        if (verses.length > 0) {
+          setDatabaseVerses(verses.map((v: any) => ({
+            bookEn: selectedBook.nameEn,
+            bookTe: selectedBook.nameTe,
+            chapter: selectedChapter,
+            verse: v.verse_number,
+            textTe: v.text,
+            textEn: "",
+          })));
+          return;
+        }
+        // Runtime fallback keeps presentation usable if a deployment is pointed at a
+        // read-only/older Supabase project while the licensed upstream data is available.
+        const fileName = selectedBook.nameEn === "Song of Solomon" ? "Song%20of%20Songs" : encodeURIComponent(selectedBook.nameEn);
+        const response = await fetch(`https://raw.githubusercontent.com/aruljohn/Bible-telugu/main/${fileName}.json`);
+        if (!response.ok) return;
+        const source = await response.json();
+        const chapterData = source.chapters?.find((c: any) => Number(c.chapter) === selectedChapter);
+        if (!active || !chapterData) return;
+        setDatabaseVerses(chapterData.verses.map((v: any) => ({
           bookEn: selectedBook.nameEn,
           bookTe: selectedBook.nameTe,
           chapter: selectedChapter,
-          verse: v.verse_number,
+          verse: Number(v.verse),
           textTe: v.text,
           textEn: "",
         })));
