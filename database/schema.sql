@@ -235,7 +235,7 @@ CREATE TABLE IF NOT EXISTS themes (
 CREATE TABLE IF NOT EXISTS media (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   name TEXT NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('image', 'video', 'audio')),
+  type TEXT NOT NULL CHECK (type IN ('image', 'video', 'audio', 'document')),
   url TEXT NOT NULL,
   thumbnail_url TEXT,
   size INTEGER,

@@ -142,9 +142,19 @@ function PresentationConsole() {
   const [remoteSession, setRemoteSession] = useState("");
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem("worshipflow-remote-pairing") || "null");
-      if (saved?.code) setRemoteSession(String(saved.code));
-    } catch { /* ignore invalid pairing */ }
+      const storageKey = "worshipflow-remote-pairing";
+      const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
+      const valid = saved?.code && Date.now() - Number(saved.createdAt || 0) < 8 * 60 * 60 * 1000;
+      if (valid) {
+        setRemoteSession(String(saved.code));
+      } else if (window.crypto?.randomUUID) {
+        // Create one short-lived capability for this presentation so the TV,
+        // operator and optional phone remote always share the same channel.
+        const pairing = { code: `WF-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`, createdAt: Date.now() };
+        localStorage.setItem(storageKey, JSON.stringify(pairing));
+        setRemoteSession(pairing.code);
+      }
+    } catch { /* ignore unavailable storage */ }
   }, []);
   const { sendMessage, subscribe } = useDisplaySync(false, remoteSession);
 
@@ -312,6 +322,7 @@ function PresentationConsole() {
         type: "slide-change",
         index,
         total: allSlides.length,
+        slide: allSlides[index],
       });
     },
     [allSlides.length, sendMessage]
@@ -390,7 +401,7 @@ function PresentationConsole() {
   // Open secondary TV / Projector Display Window
   const handleOpenTVDisplay = () => {
     const popup = window.open(
-      "/presentation/display",
+      `/presentation/display${remoteSession ? `?session=${encodeURIComponent(remoteSession)}` : ""}`,
       "WorshipFlow_TV_Display",
       "width=1280,height=720,menubar=no,toolbar=no,location=no,status=no"
     );
@@ -566,7 +577,7 @@ function PresentationConsole() {
               </div>
             ) : currentSlide ? (
               <div className="space-y-4">
-                {currentSlide.mediaUrl && currentSlide.mediaType === "video" && getVideoEmbedUrl(currentSlide.mediaUrl) ? <iframe src={getVideoEmbedUrl(currentSlide.mediaUrl)!} title={currentSlide.primaryText} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen className="h-[55vh] w-full rounded-xl" /> : currentSlide.mediaUrl && currentSlide.mediaType === "video" ? <video src={currentSlide.mediaUrl} autoPlay loop controls playsInline className="max-h-[55vh] w-full rounded-xl object-contain" /> : currentSlide.mediaUrl && currentSlide.mediaType === "document" ? <iframe src={currentSlide.mediaUrl} title={currentSlide.primaryText} className="h-[55vh] w-full rounded-xl bg-white" /> : currentSlide.mediaUrl ? <img src={currentSlide.mediaUrl} alt={currentSlide.primaryText} className="max-h-[55vh] w-full rounded-xl object-contain" /> : null}
+                {currentSlide.mediaUrl && currentSlide.mediaType === "video" && getVideoEmbedUrl(currentSlide.mediaUrl) ? <iframe src={getVideoEmbedUrl(currentSlide.mediaUrl)!} title={currentSlide.primaryText} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen className="h-[55vh] w-full rounded-xl" /> : currentSlide.mediaUrl && currentSlide.mediaType === "video" ? <video src={currentSlide.mediaUrl} autoPlay loop controls playsInline className="max-h-[55vh] w-full rounded-xl object-contain" /> : currentSlide.mediaUrl && currentSlide.mediaType === "document" ? <iframe src={currentSlide.mediaUrl} title={currentSlide.primaryText} className="h-[55vh] w-full rounded-xl bg-white" /> : currentSlide.mediaUrl && currentSlide.mediaType === "audio" ? <audio src={currentSlide.mediaUrl} controls autoPlay className="w-full max-w-xl" /> : currentSlide.mediaUrl ? <img src={currentSlide.mediaUrl} alt={currentSlide.primaryText} className="max-h-[55vh] w-full rounded-xl object-contain" /> : null}
                 {!currentSlide.mediaUrl && <p className="text-2xl sm:text-3xl font-extrabold text-white leading-relaxed text-balance">{currentSlide.primaryText}</p>}
                 {currentSlide.secondaryText && (
                   <p className="text-base sm:text-lg text-brand-gold italic text-balance font-medium">

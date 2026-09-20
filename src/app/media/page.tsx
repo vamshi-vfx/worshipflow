@@ -68,6 +68,8 @@ export default function MediaPage() {
         return <Film className="w-8 h-8" />;
       case "audio":
         return <Music2 className="w-8 h-8" />;
+      case "document":
+        return <span className="text-xs font-semibold">PDF / DOC</span>;
       default:
         return <Image className="w-8 h-8" />;
     }

@@ -130,7 +130,20 @@ export default function PresentationDisplayPage() {
       } else if (msg.type === "language-change") {
         setLanguageMode(msg.language as DisplayMode);
       } else if (msg.type === "slide-change") {
-        // Operator pushed new slide index - retrieve latest slide from storage
+        // Prefer the operator payload: this also works when a TV is a separate
+        // device and therefore cannot read the operator's localStorage.
+        if (msg.slide) {
+          setSlide({
+            primaryText: msg.slide.primaryText || msg.slide.primary_text || " ",
+            secondaryText: msg.slide.secondaryText || msg.slide.secondary_text,
+            sectionLabel: msg.slide.label || msg.slide.sectionLabel,
+            mediaUrl: msg.slide.mediaUrl || msg.slide.media_url,
+            mediaType: msg.slide.mediaType || msg.slide.media_type,
+          });
+          sendMessage({ type: "state", state: { index: msg.index, total: msg.total, slide: msg.slide } });
+          return;
+        }
+        // Legacy payload: retrieve latest slide from same-origin storage.
         const currentSongRaw = localStorage.getItem("church-lyrics-current-song");
         const currentBibleRaw = localStorage.getItem("church-lyrics-current-bible");
 
@@ -271,7 +284,7 @@ export default function PresentationDisplayPage() {
       <div className={`relative z-10 w-full max-w-[95vw] mx-auto space-y-6 break-words whitespace-pre-wrap ${source === "camera" ? "hidden" : ""}`}>
         {slide ? (
           <>
-            {slide.mediaUrl && slide.mediaType === "video" && getVideoEmbedUrl(slide.mediaUrl) ? <iframe src={getVideoEmbedUrl(slide.mediaUrl)!} title={slide.primaryText} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen className="h-[75vh] w-full rounded-xl" /> : slide.mediaUrl && slide.mediaType === "video" ? <video src={slide.mediaUrl} autoPlay loop controls playsInline className="max-h-[75vh] max-w-full rounded-xl object-contain" /> : slide.mediaUrl && slide.mediaType === "document" ? <iframe src={slide.mediaUrl} title={slide.primaryText} className="h-[75vh] w-full rounded-xl bg-white" /> : slide.mediaUrl ? <img src={slide.mediaUrl} alt={slide.primaryText} className="max-h-[75vh] max-w-full rounded-xl object-contain" /> : null}
+            {slide.mediaUrl && slide.mediaType === "video" && getVideoEmbedUrl(slide.mediaUrl) ? <iframe src={getVideoEmbedUrl(slide.mediaUrl)!} title={slide.primaryText} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen className="h-[75vh] w-full rounded-xl" /> : slide.mediaUrl && slide.mediaType === "video" ? <video src={slide.mediaUrl} autoPlay loop controls playsInline className="max-h-[75vh] max-w-full rounded-xl object-contain" /> : slide.mediaUrl && slide.mediaType === "document" ? <iframe src={slide.mediaUrl} title={slide.primaryText} className="h-[75vh] w-full rounded-xl bg-white" /> : slide.mediaUrl && slide.mediaType === "audio" ? <audio src={slide.mediaUrl} controls autoPlay className="w-full max-w-xl" /> : slide.mediaUrl ? <img src={slide.mediaUrl} alt={slide.primaryText} className="max-h-[75vh] max-w-full rounded-xl object-contain" /> : null}
             <p
               className="font-bold text-white leading-relaxed text-balance transition-all duration-200"
               style={{
