@@ -150,7 +150,7 @@ function PresentationConsole() {
       } else if (window.crypto?.randomUUID) {
         // Create one short-lived capability for this presentation so the TV,
         // operator and optional phone remote always share the same channel.
-        const pairing = { code: `WF-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`, createdAt: Date.now() };
+        const pairing = { code: `WF-${window.crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`, createdAt: Date.now() };
         localStorage.setItem(storageKey, JSON.stringify(pairing));
         setRemoteSession(pairing.code);
       }
