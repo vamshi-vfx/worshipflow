@@ -150,7 +150,7 @@ export default function BiblePage() {
           v.bookTe.includes(selectedBook.nameTe)) &&
         v.chapter === selectedChapter
     ).sort((a, b) => a.verse - b.verse);
-  }, [selectedBook, selectedChapter, customVerses]);
+  }, [selectedBook, selectedChapter, customVerses, databaseVerses]);
 
   // Global Search Results
   const searchResults = useMemo(() => {
