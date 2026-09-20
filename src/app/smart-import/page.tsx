@@ -547,7 +547,7 @@ export default function SmartImportPage() {
       const savedSongId = await db.saveSongBundle({
         id: songId || null, title: songTitle.trim() || "Untitled Song",
         romanized_title: songTitle.trim() || "Untitled Song",
-        slug: generateSafeSlug(songTitle.trim() || "Untitled Song"),
+        slug: `${generateSafeSlug(songTitle.trim() || "Untitled Song")}${songId ? "" : `-${Date.now().toString(36)}`}`, 
         language: detectedLanguage === "romanized-telugu" ? "telugu" : detectedLanguage,
         secondary_language: detectedLanguage === "mixed" ? "english" : null,
         category: "worship", lyrics: rawLyrics, tags: []
