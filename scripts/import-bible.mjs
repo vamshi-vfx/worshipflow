@@ -1,42 +1,22 @@
-﻿// WorshipFlow Bible Import Script
-// Seeds bible_translations, bible_books, bible_chapters, bible_verses tables
-// Usage: node scripts/import-bible.mjs [--dry-run]
-// Requirements: SUPABASE_SERVICE_ROLE_KEY in .env.local
-//               Run migration SQL first: supabase/migrations/20260829_bible_schema.sql
+// Imports the complete Telugu Bible from aruljohn/Bible-telugu at runtime.
+// The upstream repository is MIT-licensed; this script records that attribution in the translation row.
+import { readFileSync, existsSync } from "fs";
+import { resolve, dirname } from "path";
+import { createClient } from "@supabase/supabase-js";
+import { fileURLToPath } from "url";
 
-import { readFileSync, existsSync } from 'fs';
-import { resolve, dirname } from 'path';
-import { createClient } from '@supabase/supabase-js';
-import { fileURLToPath } from 'url';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, '..');
-
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 function loadEnv() {
-  const envFile = resolve(ROOT, '.env.local');
-  if (!existsSync(envFile)) return {};
-  const env = {};
-  readFileSync(envFile, 'utf8').split('\n').forEach((line) => {
-    const t = line.trim();
-    if (!t || t.startsWith('#')) return;
-    const eq = t.indexOf('=');
-    if (eq === -1) return;
-    env[t.slice(0, eq).trim()] = t.slice(eq + 1).trim();
-  });
-  return env;
+  const p = resolve(ROOT, ".env.local"); if (!existsSync(p)) return {};
+  return Object.fromEntries(readFileSync(p, "utf8").split(/\r?\n/).filter(x => x && !x.trim().startsWith("#")).map(x => { const i=x.indexOf("="); return [x.slice(0,i).trim(), x.slice(i+1).trim()]; }));
 }
-
 const env = loadEnv();
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || env['NEXT_PUBLIC_SUPABASE_URL'];
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || env['SUPABASE_SERVICE_ROLE_KEY'];
-const DRY_RUN = process.argv.includes('--dry-run');
-
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('ERROR: Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
-  process.exit(1);
-}
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } });
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
+const DRY_RUN = process.argv.includes("--dry-run");
+const SOURCE_ROOT = "https://raw.githubusercontent.com/aruljohn/Bible-telugu/main/";
+if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession:false } });
 
 const ALL_BOOKS = [
   { n:1,  en:'Genesis',         te:'ఆదికాండము',             st:'ఆది',    t:'OT', ch:50 },
@@ -107,125 +87,44 @@ const ALL_BOOKS = [
   { n:66, en:'Revelation',      te:'ప్రకటన గ్రంథము',     st:'ప్రక',    t:'NT', ch:22 },
 ];
 
-const SAMPLE_VERSES = [
-  { book:43, ch:3,  v:16, text:'దేవుడు లోకమును ఎంతగా ప్రేమించెనంటే, తన అద్వితీయ కుమారుని అనుగ్రహించెను; ఆయన యందు విశ్వాసముంచు ప్రతివాడును నశింపక నిత్యజీవము పొందునట్లు ఆయనను అనుగ్రహించెను.', en:'For God so loved the world that he gave his one and only Son, that whoever believes in him shall not perish but have eternal life.' },
-  { book:43, ch:1,  v:1,  text:'ఆదియందు వాక్యముండెను, ఆ వాక్యము దేవునియొద్ద ఉండెను, ఆ వాక్యము దేవుడై ఉండెను.', en:'In the beginning was the Word, and the Word was with God, and the Word was God.' },
-  { book:19, ch:23, v:1,  text:'యెహోవా నా కాపరి, నాకు కొదువ యుండదు.', en:'The LORD is my shepherd, I lack nothing.' },
-  { book:19, ch:23, v:4,  text:'మరణఛాయ లోయలో నేను నడచినను అపాయమును భయపడను; నీవు నాకు తోడైయుందువు.', en:'Even though I walk through the darkest valley, I will fear no evil, for you are with me.' },
-  { book:45, ch:8,  v:28, text:'దేవుని ప్రేమించువారికి సమస్తమును మేలుకొరకే జరుగుచున్నదని మనకు తెలియును.', en:'And we know that in all things God works for the good of those who love him.' },
-  { book:50, ch:4,  v:13, text:'నన్ను బలపరచువాని ద్వారా సమస్తమును నేను చేయగలను.', en:'I can do all this through him who gives me strength.' },
-  { book:50, ch:4,  v:7,  text:'సమస్త జ్ఞానమునకు మించిన దేవుని సమాధానము మీ హృదయములను మీ మనస్సులను క్రీస్తుయేసు నందు కాపాడును.', en:'And the peace of God, which transcends all understanding, will guard your hearts and your minds in Christ Jesus.' },
-  { book:23, ch:40, v:31, text:'యెహోవా కొరకు నిరీక్షించువారు నూతన బలమొందుదురు; గద్దలవలె రెక్కలెత్తి లేతురు.', en:'But those who hope in the LORD will renew their strength. They will soar on wings like eagles.' },
-  { book:40, ch:11, v:28, text:'ప్రయాసపడి భారము మోసికొనువారందరూ నా యొద్దకు రండి; నేను మీకు విశ్రాంతి నిత్తును.', en:'Come to me, all you who are weary and burdened, and I will give you rest.' },
-  { book:24, ch:29, v:11, text:'మీ విషయమై నేను ఆలోచించుచున్న ఆలోచనలు మీకు భవిష్యత్తును నిరీక్షణను అనుగ్రహించుటకే.', en:'For I know the plans I have for you, declares the LORD, plans to give you hope and a future.' },
-  { book:20, ch:3,  v:5,  text:'పూర్ణహృదయముతో యెహోవాయందు నమ్మకముంచుము, నీ స్వబుద్ధిని ఆధారముగా చేసికొనకుము.', en:'Trust in the LORD with all your heart and lean not on your own understanding.' },
-  { book:20, ch:3,  v:6,  text:'నీ సమస్త వ్యవహారములలో ఆయనను అనుసరించుము, అప్పుడు ఆయన నీ త్రోవలను సరాళపరచును.', en:'In all your ways submit to him, and he will make your paths straight.' },
-  { book:49, ch:2,  v:8,  text:'మీరు విశ్వాసముద్వారా కృపచేత రక్షింపబడ్డారు; ఇది దేవుని వరమే.', en:'For it is by grace you have been saved, through faith - it is the gift of God.' },
-  { book:40, ch:5,  v:3,  text:'ఆత్మవిషయమై దీనులైనవారు ధన్యులు; పరలోకరాజ్యము వారిది.', en:'Blessed are the poor in spirit, for theirs is the kingdom of heaven.' },
-  { book:45, ch:8,  v:38, text:'మరణమైనను జీవమైనను క్రీస్తుయేసు మన ప్రభువునందు ఉన్న దేవుని ప్రేమ నుండి మనలను వేరుపరచలేవు.', en:'Neither death nor life will be able to separate us from the love of God that is in Christ Jesus our Lord.' },
-];
-
-async function upsertBatch(table, rows, conflict, label) {
-  if (rows.length === 0) return 0;
-  if (DRY_RUN) { console.log('  [DRY RUN] ' + label + ': ' + rows.length + ' rows'); return rows.length; }
-  const CHUNK = 500; let total = 0;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const { error } = await supabase.from(table).upsert(rows.slice(i, i + CHUNK), { onConflict: conflict });
-    if (error) throw new Error(table + ' error: ' + error.message);
-    total += Math.min(CHUNK, rows.length - i);
-    process.stdout.write('\r  ' + label + ': ' + total + '/' + rows.length);
-  }
-  console.log('');
-  return total;
+const FILE_NAMES = new Map(ALL_BOOKS.map(b => [b.en, b.en === "Song of Solomon" ? "Song of Songs" : b.en]));
+async function batch(table, rows, conflict, label) {
+  let total=0; for (let i=0;i<rows.length;i+=500) {
+    const part=rows.slice(i,i+500);
+    if (!DRY_RUN) { const {error}=await supabase.from(table).upsert(part,{onConflict:conflict}); if(error) throw new Error(`${table}: ${error.message}`); }
+    total += part.length; process.stdout.write(`\r  ${label}: ${total}/${rows.length}`);
+  } console.log(); return total;
 }
-
+async function fetchBook(book) {
+  const res=await fetch(SOURCE_ROOT + encodeURIComponent(FILE_NAMES.get(book.en)) + ".json");
+  if (!res.ok) throw new Error(`Unable to download ${book.en}: HTTP ${res.status}`);
+  const json=await res.json();
+  if (!json.book || !Array.isArray(json.chapters)) throw new Error(`Unexpected upstream format for ${book.en}`);
+  return json;
+}
 async function main() {
-  console.log('\nWorshipFlow Bible Import');
-  console.log('========================');
-  if (DRY_RUN) console.log('[DRY RUN]\n');
-
-  const { error: tableErr } = await supabase.from('bible_translations').select('id').limit(1);
-  if (tableErr) {
-    console.error('\nERROR: Bible tables not found. Run the SQL migration first.');
-    console.error('File: supabase/migrations/20260829_bible_schema.sql');
-    console.error('In Supabase Dashboard -> SQL Editor, paste and run the migration.\n');
-    process.exit(1);
+  console.log("WorshipFlow complete Telugu Bible import (aruljohn/Bible-telugu, MIT)");
+  const {error: tableError}=await supabase.from("bible_translations").select("id").limit(1);
+  if(tableError) throw new Error(`Bible schema unavailable: ${tableError.message}`);
+  let translationId="dry";
+  if(!DRY_RUN) {
+    const {data,error}=await supabase.from("bible_translations").upsert({code:"telugu-irv",name:"Telugu Bible (Arul John)",language:"telugu",is_default:true,source_url:"https://github.com/aruljohn/Bible-telugu",license:"MIT"},{onConflict:"code"}).select("id").single();
+    if(error) throw new Error(`Translation: ${error.message}`); translationId=data.id;
   }
-
-  let tid;
-  if (!DRY_RUN) {
-    const { data, error } = await supabase.from('bible_translations')
-      .upsert([{ code:'te-IN', name:'Telugu Bible', language:'Telugu', is_public_domain:true, license:'Public Domain', source_url:'https://github.com/open-holy-bible/telugu-bible' }], { onConflict:'code' })
-      .select('id').single();
-    if (error) throw new Error('Translation: ' + error.message);
-    tid = data.id;
-    console.log('Translation ID: ' + tid);
-  } else { tid = 'dry'; }
-
-  console.log('\nImporting 66 books...');
-  const bookRows = ALL_BOOKS.map(b => ({ translation_id:tid, book_number:b.n, name_en:b.en, name_te:b.te, short_name_te:b.st, testament:b.t, total_chapters:b.ch }));
-  await upsertBatch('bible_books', bookRows, 'translation_id,book_number', 'Books');
-
-  let bookIdMap = {};
-  if (!DRY_RUN) {
-    const { data } = await supabase.from('bible_books').select('id,book_number').eq('translation_id', tid);
-    data.forEach(b => { bookIdMap[b.book_number] = b.id; });
-  }
-
-  console.log('\nImporting chapters (1189)...');
-  const chRows = [];
-  ALL_BOOKS.forEach(b => { for (let c = 1; c <= b.ch; c++) chRows.push({ book_id: DRY_RUN ? 'dry' : bookIdMap[b.n], chapter_number: c }); });
-  await upsertBatch('bible_chapters', chRows, 'book_id,chapter_number', 'Chapters');
-
-  const fullPath = resolve(ROOT, 'data', 'telugu-bible.json');
-  let verseCount = 0;
-
-  if (existsSync(fullPath)) {
-    console.log('\nFound full Bible JSON at data/telugu-bible.json ...');
-    const verses = JSON.parse(readFileSync(fullPath, 'utf8'));
-    const arr = Array.isArray(verses) ? verses : (verses.verses || []);
-    let chapMap = {};
-    if (!DRY_RUN) {
-      const { data: chs } = await supabase.from('bible_chapters').select('id,chapter_number,book_id');
-      chs.forEach(c => {
-        const bn = Object.entries(bookIdMap).find(([,id]) => id === c.book_id)?.[0];
-        if (bn) chapMap[bn + ':' + c.chapter_number] = c.id;
-      });
-    }
-    const vRows = arr.map(v => {
-      const bn = v.book || (ALL_BOOKS.findIndex(b => b.en === v.book_name || b.te === v.book_name) + 1);
-      const cid = DRY_RUN ? 'dry' : chapMap[bn + ':' + v.chapter];
-      if (!cid) return null;
-      return { translation_id:tid, chapter_id:cid, verse_number:v.verse, text:v.text||v.textTe||'', text_secondary:v.textEn||v.english||null };
-    }).filter(Boolean);
-    verseCount = await upsertBatch('bible_verses', vRows, 'chapter_id,verse_number,translation_id', 'Verses');
-  } else {
-    console.log('\nNo full Bible JSON found. Seeding 15 sample verses...');
-    console.log('For full import, place JSON at: data/telugu-bible.json');
-    console.log('Sources: https://github.com/open-holy-bible/telugu-bible');
-    let chapMap2 = {};
-    if (!DRY_RUN) {
-      const bns = [...new Set(SAMPLE_VERSES.map(v => v.book))];
-      for (const bn of bns) {
-        const bid = bookIdMap[bn]; if (!bid) continue;
-        const { data: chs } = await supabase.from('bible_chapters').select('id,chapter_number').eq('book_id', bid);
-        chs.forEach(c => { chapMap2[bn + ':' + c.chapter_number] = c.id; });
-      }
-    }
-    const sRows = SAMPLE_VERSES.map(v => {
-      const cid = DRY_RUN ? 'dry' : chapMap2[v.book + ':' + v.ch];
-      if (!cid) return null;
-      return { translation_id:tid, chapter_id:cid, verse_number:v.v, text:v.text, text_secondary:v.en };
-    }).filter(Boolean);
-    verseCount = await upsertBatch('bible_verses', sRows, 'chapter_id,verse_number,translation_id', 'Sample verses');
-  }
-
-  console.log('\n========================');
-  console.log('Import Summary:');
-  console.log('  Books:    ' + ALL_BOOKS.length);
-  console.log('  Chapters: ' + chRows.length);
-  console.log('  Verses:   ' + verseCount + (verseCount < 1000 ? ' (sample — add data/telugu-bible.json for full Bible)' : ''));
-  console.log('\nDone! Run: npm run validate:bible\n');
+  const books = [];
+  for (const book of ALL_BOOKS) { const src=await fetchBook(book); books.push({book,src}); }
+  const bookRows=books.map(({book,src})=>({translation_id:translationId,book_number:book.n,name:src.book.telugu || book.te,name_english:src.book.english || book.en,name_short:book.st,testament:book.t === "OT" ? "old" : "new",chapter_count:src.chapters.length,verse_count:src.chapters.reduce((n,c)=>n+c.verses.length,0)}));
+  await batch("bible_books",bookRows,"translation_id,book_number","Books");
+  let bookId={};
+  if(!DRY_RUN) { const {data,error}=await supabase.from("bible_books").select("id,book_number").eq("translation_id",translationId); if(error) throw error; for(const r of data) bookId[r.book_number]=r.id; }
+  const chapterRows=[]; const verseRows=[];
+  for(const {book,src} of books) for(const c of src.chapters) { chapterRows.push({book_id:DRY_RUN?"dry":bookId[book.n],chapter_number:Number(c.chapter),verse_count:c.verses.length}); }
+  await batch("bible_chapters",chapterRows,"book_id,chapter_number","Chapters");
+  let chapterId={};
+  if(!DRY_RUN) { const {data,error}=await supabase.from("bible_chapters").select("id,book_id,chapter_number"); if(error) throw error; for(const r of data) chapterId[`${r.book_id}:${r.chapter_number}`]=r.id; }
+  for(const {book,src} of books) for(const c of src.chapters) for(const v of c.verses) verseRows.push({chapter_id:DRY_RUN?"dry":chapterId[`${bookId[book.n]}:${Number(c.chapter)}`],book_id:DRY_RUN?"dry":bookId[book.n],translation_id:translationId,verse_number:Number(v.verse),text:String(v.text || "")});
+  if(verseRows.some(v=>!v.text)) throw new Error("Upstream contains an empty verse");
+  await batch("bible_verses",verseRows,"chapter_id,verse_number","Verses");
+  console.log(`Imported ${books.length} books, ${chapterRows.length} chapters, ${verseRows.length} verses.`);
 }
-
-main().catch(e => { console.error('Fatal:', e.message); process.exit(1); });
+main().catch(e=>{console.error("\nFatal:",e.message);process.exit(1);});

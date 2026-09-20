@@ -71,3 +71,15 @@ Premium Church Worship Lyrics & Live Presentation Platform
 ## License
 
 ISC
+
+## Complete Telugu Bible import
+
+The importer loads all 66 books (1,189 chapters / 31,102 verses) from [aruljohn/Bible-telugu](https://github.com/aruljohn/Bible-telugu), whose repository is MIT-licensed. It fetches the pinned `main` source files at import time, writes Telugu book names and verse text into the existing `bible_translations`, `bible_books`, `bible_chapters`, and `bible_verses` tables, and records the source URL and license in the translation row. Existing rows are preserved through conflict-safe upserts.
+
+Run from the repository root with a Supabase service-role key (never expose it to the browser):
+
+```sh
+npm ci
+npm run import:bible
+npm run validate:bible
+```
