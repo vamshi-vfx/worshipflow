@@ -59,6 +59,8 @@ export default function BiblePage() {
   const [importText, setImportText] = useState("");
   const [importFormat, setImportFormat] = useState<"json" | "csv">("json");
   const [activeTab, setActiveTab] = useState<"browse" | "saved" | "search">("browse");
+  const [databaseSearchResults, setDatabaseSearchResults] = useState<BibleVerse[]>([]);
+  const [isSearchingDatabase, setIsSearchingDatabase] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -152,11 +154,62 @@ export default function BiblePage() {
     ).sort((a, b) => a.verse - b.verse);
   }, [selectedBook, selectedChapter, customVerses, databaseVerses]);
 
-  // Global Search Results
-  const searchResults = useMemo(() => {
+  // Global Search Results. Keep the curated/offline index instant, then augment it
+  // with the complete imported translation in Supabase when a keyword is entered.
+  const localSearchResults = useMemo(() => {
     if (!scriptureSearch.trim()) return [];
     return queryBibleScriptures(scriptureSearch, customVerses);
   }, [scriptureSearch, customVerses]);
+
+  useEffect(() => {
+    let active = true;
+    const query = scriptureSearch.trim();
+    if (!query || /^([a-z\u0C00-\u0C7F0-9\s]+?)\s*\d+(?:\s*[:\-]\s*\d+)?$/i.test(query)) {
+      setDatabaseSearchResults([]);
+      setIsSearchingDatabase(false);
+      return () => { active = false; };
+    }
+    setIsSearchingDatabase(true);
+    (async () => {
+      try {
+        const translations = await db.getBibleTranslations();
+        const translation = translations.find((t: any) => t.code === "telugu-aruljohn") || translations.find((t: any) => t.language === "telugu") || translations[0];
+        if (!translation) return;
+        const rows = await db.searchBibleVerses(translation.id, query, 50);
+        if (!active) return;
+        setDatabaseSearchResults(rows.map((row: any) => {
+          const book = Array.isArray(row.book) ? row.book[0] : row.book;
+          const chapter = Array.isArray(row.chapter) ? row.chapter[0] : row.chapter;
+          const info = ALL_BIBLE_BOOKS.find((b) => b.id === Number(book?.book_number));
+          return {
+            bookEn: info?.nameEn || book?.name_english || "",
+            bookTe: info?.nameTe || book?.name || "",
+            chapter: Number(chapter?.chapter_number || 0),
+            verse: Number(row.verse_number || 0),
+            textTe: row.text || "",
+            textEn: "",
+          } as BibleVerse;
+        }).filter((verse: BibleVerse) => verse.bookEn && verse.chapter && verse.verse));
+      } catch (error) {
+        console.error("Bible database search failed", error);
+        if (active) setDatabaseSearchResults([]);
+      } finally {
+        if (active) setIsSearchingDatabase(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [scriptureSearch]);
+
+  const searchResults = useMemo(() => {
+    const combined = [...localSearchResults, ...databaseSearchResults];
+    const seen = new Set<string>();
+    return combined.filter((verse) => {
+      const key = `${verse.bookEn}:${verse.chapter}:${verse.verse}:${verse.textTe}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [localSearchResults, databaseSearchResults]);
 
   // Toggle Verse Selection
   const toggleVerseSelection = (verseNum: number) => {
@@ -683,7 +736,12 @@ export default function BiblePage() {
             </div>
 
             <div className="space-y-4">
-              {searchResults.length === 0 ? (
+              {isSearchingDatabase && searchResults.length === 0 ? (
+                <div className="glass rounded-2xl p-12 text-center text-muted-foreground border border-white/5">
+                  <RefreshCw className="w-8 h-8 mx-auto mb-3 animate-spin text-brand-gold" />
+                  <p className="text-white font-medium">Searching the complete Bible…</p>
+                </div>
+              ) : searchResults.length === 0 ? (
                 <div className="glass rounded-2xl p-12 text-center text-muted-foreground border border-white/5">
                   <Search className="w-10 h-10 mx-auto mb-3 opacity-40 text-brand-gold" />
                   <p className="text-white font-medium">No matching scripture found</p>
